@@ -54,9 +54,9 @@ class Object:
                 newy = (this.velocity.y**2 + 2*ACCEL.y*((sheight-1)-(this.position.y+this.rect.height/2)))**0.5
                 timeleft = 1 - ((newy - this.velocity.y)/ACCEL.y)
                 newy *= -1
-                newery = newy - ACCEL.y * timeleft
-                this.velocity.y = newery
-                this.position.y = (sheight-1) + (newery*timeleft - ACCEL.y*(timeleft**2)) - this.rect.height/2
+                newery = newy + ACCEL.y * (timeleft)
+                this.velocity.y = newery - ACCEL.y
+                this.position.y = (sheight-1) + ((newy*timeleft + ACCEL.y*(timeleft**2))) - this.rect.height/2
                 this.rect.center = this.position.get()
     def draw(this):
         pygame.draw.rect(screen, (0,0,0), this.rect, 1)
@@ -160,12 +160,16 @@ ACCEL = Vector2(0, 9.8/FPS)
 
 
 objectmanager = ObjectManager()
-objectmanager.add(Object(Vector2(25,100), Vector2(0.2,0), (25,25), 0.999))
+
+objectmanager.add(Object(Vector2(25,300), Vector2(0.2,0), (25,25), 0.9))
 
 #objectmanager.add(Object(Vector2(200,300), Vector2(1,-10), (25,25)))
 #objectmanager.add(Object(Vector2(600,300), Vector2(-1,-10), (25,25)))
 
-objectmanager.add(Object(Vector2(200,574), Vector2(10,0), (25,25), 0.9))
+#objectmanager.add(Object(Vector2(200,574), Vector2(10,0), (25,25), 0.9))
+
+#objectmanager.add(Object(Vector2(200,565.2), Vector2(5,0), (25,25), 0.9))
+
 properter = Properter()
 
 running = True
@@ -175,7 +179,7 @@ ticker = 0
 screen.fill((255,255,255))
 while running:
     ticker += 1
-    #screen.fill((255,255,255))
+    screen.fill((255,255,255))
     #update
     if paused:
         #pause update logic
