@@ -1,4 +1,4 @@
-import pygame, math
+import pygame, math, sys
 from random import randint
 from pygame import *
 
@@ -16,6 +16,8 @@ class Vector2:
         return this
     def __sub__(this, v2):
         return Vector2(this.x-v2.x, this.y-v2.y)
+    def __neg__(this):
+        return Vector2(-this.x, -this.y)
     def __abs__(this):
         return Vector2(abs(this.x), abs(this.y))
     def magnitude(this):
@@ -28,15 +30,34 @@ class Vector2:
         return (int(this.x), int(this.y))
 
 class Object:
-    def __init__(this, position, velocity, size): #size is (w,h)
+    def __init__(this, position, velocity, size, friction): #size is (w,h)
         this.position = position # might be totally replaced by this.rect.center
         this.velocity = velocity
         this.rect = pygame.Rect((0,0), size)
         this.rect.center = this.position.get()
+        this.friction = friction
     def update(this):
+        #if round(this.velocity.y) == 0:
+            #print this.position.y
         this.velocity += ACCEL
         this.position += this.velocity
         this.rect.center = this.position.get()
+        if this.position.y + this.rect.height/2.0 >= sheight-1:
+            this.velocity.x *= this.friction
+            if this.velocity.y<0.5:
+                this.position.y -= this.velocity.y
+                this.velocity.y = 0
+            else:
+                this.position -= this.velocity
+
+                this.velocity -= ACCEL
+                newy = (this.velocity.y**2 + 2*ACCEL.y*((sheight-1)-(this.position.y+this.rect.height/2)))**0.5
+                timeleft = 1 - ((newy - this.velocity.y)/ACCEL.y)
+                newy *= -1
+                newery = newy - ACCEL.y * timeleft
+                this.velocity.y = newery
+                this.position.y = (sheight-1) + (newery*timeleft - ACCEL.y*(timeleft**2)) - this.rect.height/2
+                this.rect.center = this.position.get()
     def draw(this):
         pygame.draw.rect(screen, (0,0,0), this.rect, 1)
 
@@ -139,15 +160,22 @@ ACCEL = Vector2(0, 9.8/FPS)
 
 
 objectmanager = ObjectManager()
+objectmanager.add(Object(Vector2(25,100), Vector2(0.2,0), (25,25), 0.999))
+
+#objectmanager.add(Object(Vector2(200,300), Vector2(1,-10), (25,25)))
+#objectmanager.add(Object(Vector2(600,300), Vector2(-1,-10), (25,25)))
+
+objectmanager.add(Object(Vector2(200,574), Vector2(10,0), (25,25), 0.9))
 properter = Properter()
 
 running = True
 paused = False
 focus = False
 ticker = 0
+screen.fill((255,255,255))
 while running:
     ticker += 1
-    screen.fill((255,255,255))
+    #screen.fill((255,255,255))
     #update
     if paused:
         #pause update logic
@@ -213,9 +241,6 @@ while running:
             properter.update()
             #draw
             properter.draw()
-            if ticker%30==0:
-                objectmanager.add( Object(Vector2(512,300), Vector2(randint(-10,10), -3), (randint(10,50), randint(10,50))) )
-                properter.focus(objectmanager.objects[objectmanager.nextindex-1])
             objectmanager.update()
         else:
             #unpaused update logic
@@ -231,8 +256,6 @@ while running:
                         focus = objectmanager.click(event.pos)
                         if focus:
                             properter.focus(objectmanager.objects[focus])
-            if ticker%30==0:
-                objectmanager.add( Object(Vector2(512,300), Vector2(randint(-10,10), -3), (randint(10,50), randint(10,50))) )
             objectmanager.update()
     
     objectmanager.draw()
