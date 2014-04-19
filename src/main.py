@@ -71,7 +71,7 @@ class Object:
         this.velocity = copy.copy(this.lastVelocity)
     
     def draw(this):
-        pygame.draw.rect(screen, (0,0,0), this.rect, 1)
+        pygame.draw.rect(objectScreen, (0,0,0), this.rect, 1)
 
     def getFunction(this, value):
         if value == "position.x":
@@ -246,8 +246,14 @@ class ObjectManager:
             
             
     def draw(this):
+        objectScreen.fill((255,255,255))
         for o in this.aliveObjects:
             this.objects[o].draw()
+        if focus != -1:
+            crop = pygame.transform.smoothscale(objectScreen.subsurface(this.objects[focus].rect.inflate((464-this.objects[focus].rect.width)/4,(600-this.objects[focus].rect.height)/4).clamp(objectScreen.get_rect())), (484,600))
+            screen.blit(crop,(0,0))
+        else:
+            screen.blit(objectScreen, (0,0))
     def add(this, obj):
         this.objects.append(obj)
         if this.aliveObjects:
@@ -260,6 +266,28 @@ class ObjectManager:
                 return i
         return -1
 
+class Tab:
+    def __init__(this, rect, text):
+        this.rect = rect
+        textsize = fonts["textbox"].size(text)
+        text = fonts["textbox"].render(text, 1, (0,0,0))
+        textpos = ((rect.width-textsize[0])/2,(rect.height-textsize[1])/2)
+        outrect = this.rect.copy()
+        outrect.topleft = (0,0)
+        this.visual = [pygame.Surface(this.rect.size),pygame.Surface(this.rect.size)]
+        this.visual[0].fill((255,255,255))
+        pygame.draw.rect(this.visual[0], (0,0,0), outrect, 1)
+        this.visual[0].blit(text, textpos)
+        this.visual[1].fill((255,200,200))
+        pygame.draw.rect(this.visual[1], (0,0,0), outrect, 1)
+        this.visual[1].blit(text, textpos)
+        
+    def click(this, point):
+        return this.rect.collidepoint(point)
+    def draw(this, on):
+        screen.blit(this.visual[on], this.rect.topleft)
+        
+
 class Textbox:
     def __init__(this, rect, contents):
         this.rect = rect
@@ -267,20 +295,32 @@ class Textbox:
         this.contents = contents
         this.on = False
         this.cursor = 0
+        this.altered = False
         this.render()
+    def turnOn(this):
+        this.on = True
+        this.cursor = 0
+        this.altered = False
+    def turnOff(this):
+        this.on = False
+        return this.altered
     def assault(this, text):
-        this.contents = this.contents[:this.cursor]+text+this.contents[this.cursor:]
-        this.cursor += 1
-        this.render()
+        if text in numChars:
+            this.contents = this.contents[:this.cursor]+text+this.contents[this.cursor:]
+            this.cursor += 1
+            this.altered = True
+            this.render()
     def backspace(this):
         if this.cursor:
             this.contents = this.contents[:this.cursor-1]+this.contents[this.cursor:]
             this.cursor -= 1
-        this.render()
+            this.altered = True
+            this.render()
     def delete(this):
         if this.cursor != len(this.contents):
             this.contents = this.contents[:this.cursor]+this.contents[this.cursor+1:]
-        this.render()
+            this.altered = True
+            this.render()
     def cursorMove(this, forward):
         if forward and this.cursor != len(this.contents):
             this.cursor += 1
@@ -310,18 +350,19 @@ class Graph:
     def refunc(this, newfunc, domain, offset):
         this.fx = []
         this.xScale = float((domain[1]-domain[0]))/(this.rect.width-2)
+        this.yScale = float(this.rect.height)/sHeight
         this.offset = offset
         this.func = newfunc
         this.steps = 0
         for rx in range(1,this.rect.width-1):
             x = rx*this.xScale
-            this.fx.append(this.rect.top+int(eval(newfunc)))
+            this.fx.append(this.rect.top+int(this.yScale*eval(newfunc)))
 
     def step(this):
         for _ in range(int(1.0/this.xScale)):
             this.fx.pop(0)
             x = this.xScale*(this.steps + this.rect.width-2)
-            this.fx.append(this.rect.top+int(eval(this.func)))
+            this.fx.append(this.rect.top+int(this.yScale*eval(this.func)))
             this.steps += 1
         
     def draw(this):
@@ -340,17 +381,25 @@ class Properter:
         this.textbox["velocity.x"] = Textbox(pygame.Rect((30,120), (40,17)), "")
         this.textbox["velocity.y"] = Textbox(pygame.Rect((80,120), (40,17)), "")
 
-        graphRect = pygame.Rect(440, 20, 560, 560)
+        
+
+        graphRect = pygame.Rect(464, 40, 560, 560)
         this.graph = {}
         this.graph["position.x"] = Graph(graphRect, 5)
         this.graph["position.y"] = Graph(graphRect, 5)
         this.graph["velocity.x"] = Graph(graphRect, 5)
         this.graph["velocity.y"] = Graph(graphRect, 5)
+
+        this.tab = {}
+        this.tab["position.x"] = Tab(pygame.Rect(464, 9, 125, 30), "x position")
+        this.tab["position.y"] = Tab(pygame.Rect(590, 9, 125, 30), "y position")
+        this.tab["velocity.x"] = Tab(pygame.Rect(716, 9, 125, 30), "x velocity")
+        this.tab["velocity.y"] = Tab(pygame.Rect(842, 9, 125, 30), "y velocity")
+        
         
         this.textboxon = False
         
     def focus(this, obj):
-        print "updateing props"
         this.obj = obj
         this.update()
         if this.textboxon:
@@ -367,18 +416,42 @@ class Properter:
     def draw(this):
         for t in this.textbox:
             this.textbox[t].draw()
+            if t == this.textboxon:
+                this.tab[t].draw(True)
+            else:
+                this.tab[t].draw(False)
         if this.textboxon:
             this.graph[this.textboxon].draw()
-            
+
+    def closeTextBox(this):
+        if re.match(numregex, this.textbox[this.textboxon].contents) and this.textbox[this.textboxon].altered:
+            exec("this.obj."+this.textboxon+" = "+this.textbox[this.textboxon].contents)
+        else:
+            this.updateTextBoxes()
+    
     def click(this, click):
         for t in this.textbox:
             if this.textbox[t].rect.collidepoint(click):
                 if this.textboxon:
-                    this.textbox[this.textboxon].on = False
-                this.textbox[t].on = True
+                    this.closeTextBox()
+                    this.textbox[this.textboxon].turnOff()
+                this.textbox[t].turnOn()
                 this.textboxon = t
                 this.updateGraphs()
                 return True
+            if this.tab[t].click(click):
+                for off in this.tab:
+                    if off != t:
+                        this.tab[off].on = False
+                if this.textboxon:
+                    this.closeTextBox()
+                    this.textbox[this.textboxon].turnOff()
+                this.textbox[t].turnOn()
+                this.textboxon = t
+                this.updateGraphs()
+                return True
+        if this.textboxon:
+            this.closeTextBox()
         return False
     
     def keyit(this, event):
@@ -387,21 +460,22 @@ class Properter:
         elif event.key == 127 and paused:
             this.textbox[this.textboxon].delete()
         elif event.key == 13 and paused:
-            if re.match(numregex, this.textbox[this.textboxon].contents):
-                exec("this.obj."+this.textboxon+" = "+this.textbox[this.textboxon].contents)
-            else:
-                this.updateTextBoxes()
+            this.closeTextBox()
+            this.textbox[this.textboxon].turnOff()
+            this.textboxon = False
         elif event.key == 275 and paused:
             this.textbox[this.textboxon].cursorMove(True)
         elif event.key == 276 and paused:
             this.textbox[this.textboxon].cursorMove(False)
         elif paused:
             this.textbox[this.textboxon].assault(event.unicode)
+        return False
+        
             
     def update(this):
         this.updateTextBoxes()
         if this.textboxon:
-            if this.obj.collided:
+            if this.obj.collided or ticker%10==0:
                 this.obj.collided = False
                 this.updateGraphs()
             else:
@@ -415,7 +489,10 @@ dimensions = sWidth, sHeight = 1024, 600
 screen = pygame.display.set_mode(dimensions)
 clock = pygame.time.Clock()
 
+objectScreen = pygame.Surface(dimensions)
+
 numregex = "[-+]?[0-9]*\.?[0-9]+$"
+numChars = ["-",".","0","1","2","3","4","5","6","7","8","9"]
 
 fonts = {}
 fonts["textbox"] = pygame.font.Font("res/font/Courier.ttf", 12)
@@ -466,10 +543,10 @@ while running:
                 if event.type == QUIT:
                     running = False
                 elif event.type == KEYDOWN:
+                    if event.key == K_p:
+                        paused = not paused
                     if properter.textboxon:
                         properter.keyit(event)
-                    elif event.key == K_p:
-                        paused = not paused
                 elif event.type == MOUSEBUTTONDOWN:
                     if event.button == 1:
                         if not properter.click(event.pos):
@@ -480,8 +557,6 @@ while running:
                                 focus = newfocus
                                 if focus != -1:
                                     properter.focus(objectmanager.objects[focus])
-            #draw
-            properter.draw()
         else:
             #unfocused paused
             #input
@@ -506,7 +581,7 @@ while running:
                 if event.type == KEYDOWN:
                     if properter.textboxon:
                         properter.keyit(event)
-                    elif event.key == K_p:
+                    if event.key == K_p:
                         paused = not paused
                 elif event.type == MOUSEBUTTONDOWN:
                     if event.button == 1:
@@ -521,8 +596,6 @@ while running:
             
             objectmanager.update()
             properter.update()
-            #draw
-            properter.draw()
         else:
             #unpaused update logic
             #input
@@ -539,8 +612,10 @@ while running:
                             properter.focus(objectmanager.objects[focus])
             objectmanager.update()
 
-
+    
     objectmanager.draw()
+    if focus != -1:
+            properter.draw()
     pygame.display.flip()
     clock.tick(FPS)
     
