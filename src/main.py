@@ -87,6 +87,7 @@ class ObjectManager:
     def __init__(this):
         this.objects = []
         this.aliveObjects = []
+        this.zoom = 1
 
     def collides(this, o1, o2):
         obj1 = this.objects[this.aliveObjects[o1]]
@@ -250,7 +251,7 @@ class ObjectManager:
         for o in this.aliveObjects:
             this.objects[o].draw()
         if focus != -1:
-            crop = pygame.transform.smoothscale(objectScreen.subsurface(this.objects[focus].rect.inflate((464-this.objects[focus].rect.width)/4,(600-this.objects[focus].rect.height)/4).clamp(objectScreen.get_rect())), (484,600))
+            crop = pygame.transform.smoothscale(objectScreen.subsurface(this.objects[focus].rect.inflate((464-this.objects[focus].rect.width)/this.zoom,(600-this.objects[focus].rect.height)/this.zoom).clamp(objectScreen.get_rect())), (484,600))
             screen.blit(crop,(0,0))
         else:
             screen.blit(objectScreen, (0,0))
@@ -261,9 +262,10 @@ class ObjectManager:
         else:
             this.aliveObjects.append(0)
     def click(this, pos):
-        for i in this.aliveObjects:
-            if this.objects[i].rect.collidepoint(pos):
-                return i
+        if focus == -1:
+            for i in this.aliveObjects:
+                if this.objects[i].rect.collidepoint(pos):
+                    return i
         return -1
 
 class Tab:
@@ -370,6 +372,61 @@ class Graph:
         for rx in range(this.rect.width-3):
             pygame.draw.line(screen,(0,0,0),(rx+this.rect.left,this.fx[rx]),(rx+this.rect.left+1,this.fx[rx+1]),1)
         pygame.draw.line(screen, (255,0,0), (0,this.fx[0]), (1023,this.fx[0]), 1)
+
+class Slider:
+    def __init__(this, low, high, start, interval, rect):
+        this.low = low
+        this.high = high
+        this.current = start
+        this.interval = interval
+        this.rect = rect
+        ticks = int((high - low)/interval)
+        twid = rect.width / ticks
+        this.notches = []
+        this.values = []
+        for x in range(ticks+1):
+            this.notches.append((this.rect.left + x * twid, this.rect.centery))
+            this.values.append(low + x*interval)
+
+        this.slider = pygame.Rect(0,0,5,30)
+        this.updateSlider()
+    def click(this, pos):
+        if this.slider.collidepoint(pos):
+            global clickRelease
+            clickRelease = 1
+            return True
+        if this.rect.collidepoint(pos):
+            this.moveSlider(pos)
+            return True
+        return False
+
+    def moveSlider(this, pos):
+        if pos[0] > this.rect.right:
+            this.current = len(this.values) - 1
+        elif pos[0] < this.rect.left:
+            this.current = 0
+        else:
+            for x in range(len(this.notches)-1):
+                if pos[0] == this.notches[x][0]:
+                    this.current = x
+                    break
+                elif this.notches[x][0] < pos[0] < this.notches[x+1][0]:
+                    if pos[0] - this.notches[x][0] <= this.notches[x+1][0] - pos[0]:
+                        this.current = x
+                    else:
+                        this.current = x+1
+                    break
+        this.updateSlider()
+            
+    
+    def draw(this):
+        pygame.draw.rect(screen, (0,0,0), this.rect, 1)
+        pygame.draw.rect(screen, (100,0,0), this.slider, 2)
+        
+    def updateSlider(this):
+        this.slider.center = this.notches[this.current]
+    def getValue(this):
+        return this.values[this.current]
         
 
 class Properter:
@@ -395,11 +452,13 @@ class Properter:
         this.tab["position.y"] = Tab(pygame.Rect(590, 9, 125, 30), "y position")
         this.tab["velocity.x"] = Tab(pygame.Rect(716, 9, 125, 30), "x velocity")
         this.tab["velocity.y"] = Tab(pygame.Rect(842, 9, 125, 30), "y velocity")
-        
+
+        this.zoomSlider = Slider(1, 4, 2, 0.5, pygame.Rect(10, 10, 80, 20))
         
         this.textboxon = False
         
     def focus(this, obj):
+        this.updateC()
         this.obj = obj
         this.update()
         if this.textboxon:
@@ -422,6 +481,7 @@ class Properter:
                 this.tab[t].draw(False)
         if this.textboxon:
             this.graph[this.textboxon].draw()
+        this.zoomSlider.draw()
 
     def closeTextBox(this):
         if re.match(numregex, this.textbox[this.textboxon].contents) and this.textbox[this.textboxon].altered:
@@ -430,6 +490,10 @@ class Properter:
             this.updateTextBoxes()
     
     def click(this, click):
+        slid = this.zoomSlider.click(click)
+        if slid:
+            this.updateC()
+            return True
         for t in this.textbox:
             if this.textbox[t].rect.collidepoint(click):
                 if this.textboxon:
@@ -480,6 +544,11 @@ class Properter:
                 this.updateGraphs()
             else:
                 this.graph[this.textboxon].step()
+    
+    def updateC(this):
+        objectmanager.zoom = this.zoomSlider.getValue()
+
+
 
 
 #Initializations
@@ -530,6 +599,10 @@ paused = False
 focus = -1
 ticker = 0
 screen.fill((255,255,255))
+
+clickRelease = 0#0 : unset
+                #1 : properter.zoomSlider.move(pos)
+
 while running:
     ticker += 1
     screen.fill((255,255,255))
@@ -557,6 +630,8 @@ while running:
                                 focus = newfocus
                                 if focus != -1:
                                     properter.focus(objectmanager.objects[focus])
+                elif event.type == MOUSEBUTTONUP:
+                    clickRelease = 0
         else:
             #unfocused paused
             #input
@@ -593,6 +668,8 @@ while running:
                                 focus = newfocus
                                 if focus != -1:
                                     properter.focus(objectmanager.objects[focus])
+                elif event.type == MOUSEBUTTONUP:
+                    clickRelease = 0
             
             objectmanager.update()
             properter.update()
@@ -611,11 +688,16 @@ while running:
                         if focus != -1:
                             properter.focus(objectmanager.objects[focus])
             objectmanager.update()
+            
+    if clickRelease:
+        if clickRelease == 1:
+            properter.zoomSlider.moveSlider(pygame.mouse.get_pos())
+            properter.updateC()
 
     
     objectmanager.draw()
     if focus != -1:
-            properter.draw()
+        properter.draw()
     pygame.display.flip()
     clock.tick(FPS)
     
