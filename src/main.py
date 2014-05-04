@@ -51,27 +51,22 @@ class Object:
         this.lastVelocity = copy.copy(this.velocity)
         this.velocity += this.accel
         this.position += this.velocity
-        if this.position.y + this.rect.height/2.0 >= sHeight-1: ###############################breaks at low velocities, maybe just put a floor made of an object, more versatile in the end 
-            this.collided = True
-            this.velocity.x *= this.friction
-            this.position.y -= this.velocity.y
-            try:
-                this.velocity -= this.accel
-                newy = (this.velocity.y**2 + 2*this.accel.y*((sHeight-1)-(this.position.y+this.rect.height/2)))**0.5
-                timeLeft = 1 - ((newy - this.velocity.y)/this.accel.y)
-                newy *= -this.spring
-                newery = newy + this.accel.y * (timeLeft)
-                this.velocity.y = newery - this.accel.y
-                this.position.y = (sHeight-1) + ((newy*timeLeft + this.accel.y*(timeLeft**2))) - this.rect.height/2
-            except:
-                this.velocity.y = 0
+        if this.position.y + this.rect.height/2.0 >= sHeight:
+            this.position.y -= 2*((this.position.y+this.rect.height/2) - sHeight)
+            this.velocity.y *= -this.spring
+        if this.position.x + this.rect.width/2.0 >= sWidth:
+            this.position.x -= 2*((this.position.x+this.rect.width/2) - sWidth)
+            this.velocity.x *= -this.spring
+        if this.position.x - this.rect.width/2.0 < 0:
+            this.position.x -= 2*((this.position.x-this.rect.width/2))
+            this.velocity.x *= -this.spring
         this.rect.center = this.position.get()
     def revert(this):
         this.position = copy.copy(this.lastPosition)
         this.velocity = copy.copy(this.lastVelocity)
     
-    def draw(this):
-        pygame.draw.rect(objectScreen, (0,0,0), this.rect, 1)
+    def draw(this, color=(0,0,0)):
+        pygame.draw.rect(objectScreen, color, this.rect, 1)
 
     def getFunction(this, value):
         if value == "position.x":
@@ -100,7 +95,7 @@ class ObjectManager:
     def update(this):
         for o in this.aliveObjects: #updates
             this.objects[o].update()
-
+        
         collisions = []
         toRevert = []
         for o1 in range(len(this.aliveObjects)):
@@ -119,129 +114,53 @@ class ObjectManager:
         RLcol = [[] for x in range(len(this.aliveObjects))]
         BTcol = [[] for x in range(len(this.aliveObjects))]
         #print collisions
-##        for o1,o2 in collisions:
-##            obj1 = this.objects[o1]
-##            obj2 = this.objects[o2]
-##            if obj1.accel.x == 0:
-##                if obj2.accel.x == 0:
-##                    if obj1.velocity.x == obj2.velocity.x:
-##                        RLt = None
-##                        LRt = None
-##                    else:
-##                        RLt = (obj2.position.x - obj2.rect.width/2 - obj1.position.x - obj1.rect.width/2)/(obj1.velocity.x - obj2.velocity.x)
-##                        LRt = (obj1.position.x - obj1.rect.width/2 - obj2.position.x - obj2.rect.width/2)/(obj2.velocity.x - obj1.velocity.x)
-##                else:
-##                    RLa = obj2.accel.x/2
-##                    RLb = obj2.velocity.x - obj1.velocity.x
-##                    RLc = obj2.position.x - obj2.rect.width/2 - obj1.position.x - obj1.rect.width/2
-##                    RLd = (RLb**2) - (4*RLa*RLc)
-##                    if RLd >= 0:
-##                        RLt = min(x for x in [(-RLb+math.sqrt(RLd))/(2*RLa),(-RLb-math.sqrt(RLd))/(2*RLa)] if x >= 0)
-##                    LRa = RLa
-##                    LRb = obj2.velocity.x - obj1.velocity.x
-##                    LRc = obj2.position.x + obj2.rect.width/2 - obj1.position.x + obj1.rect.width/2
-##                    LRd = (LRb**2) - (4*LRa*LRc)
-##                    if LRd >= 0:
-##                        LRt = min(x for x in [(-LRb+math.sqrt(LRd))/(2*LRa),(-LRb-math.sqrt(LRd))/(2*LRa)] if x >= 0)
-##            else:
-##                if obj2.accel.x == 0:
-##                    RLa = obj1.accel.x/2
-##                    RLb = obj1.velocity.x - obj2.velocity.x
-##                    RLc = obj1.position.x + obj1.rect.width/2 - obj2.position.x + obj2.rect.width/2
-##                    RLd = (RLb**2) - (4*RLa*RLc)
-##                    if RLd >= 0:
-##                        RLt = min(x for x in [(-RLb+math.sqrt(RLd))/(2*RLa),(-RLb-math.sqrt(RLd))/(2*RLa)] if x >= 0)
-##                    LRa = RLa
-##                    LRb = obj1.velocity.x - obj2.velocity.x
-##                    LRc = obj1.position.x - obj1.rect.width/2 - obj2.position.x - obj2.rect.width/2
-##                    LRd = (LRb**2) - (4*LRa*LRc)
-##                    if LRd >= 0:
-##                        LRt = min(x for x in [(-LRb+math.sqrt(LRd))/(2*LRa),(-LRb-math.sqrt(LRd))/(2*LRa)] if x >= 0)
-##                else:
-##                    if obj1.accel.x == obj2.accel.x:
-##                        RLt = (obj2.position.x - obj2.rect.width/2 - obj1.position.x - obj1.rect.width/2) / (obj2.velocity.x - obj1.velocity.x)
-##                        LRt = (obj2.position.x + obj2.rect.width/2 - obj1.position.x + obj1.rect.width/2) / (obj2.velocity.x - obj1.velocity.x)
-##                    else:
-##                        RLa = (obj2.accel.x - obj1.accel.x)/2
-##                        RLb = obj2.velocity.x - obj1.velocity.x
-##                        RLc = obj2.position.x - obj2.rect.width/2 - obj1.position.x - obj1.rect.width/2
-##                        RLd = (RLb**2) - (4*RLa*RLc)
-##                        if RLd >= 0:
-##                            RLt = min(x for x in [(-RLb+math.sqrt(RLd))/(2*RLa),(-RLb-math.sqrt(RLd))/(2*RLa)] if x >= 0)
-##                        LRa = (obj2.accel.x - obj1.accel.x)/2
-##                        LRb = obj2.velocity.x - obj1.velocity.x
-##                        LRc = obj2.position.x + obj2.rect.width/2 - obj1.position.x + obj1.rect.width/2
-##                        LRd = (LRb**2) - (4*LRa*LRc)
-##                        if LRd >= 0:
-##                            LRt = min(x for x in [(-LRb+math.sqrt(LRd))/(2*LRa),(-LRb-math.sqrt(LRd))/(2*LRa)] if x >= 0)
-##            ###############################################################################################################implement checks for None, Negatives, other stuff
-##            try:
-##                RLcol[o1].append(min([RLt,LRt]))
-##                RLcol[o2].append(min([RLt,LRt]))
-##            except:
-##                RLcol[o1].append(None)
-##                RLcol[o2].append(None)
-##
-##            if obj1.accel.y == 0:
-##                if obj2.accel.y == 0:
-##                    if obj1.velocity.x == obj2.velocity.x:
-##                        BTt = None
-##                        TBt = None
-##                    else:
-##                        BTt = (obj2.position.y - obj2.rect.height/2 - obj1.position.y - obj1.rect.height/2)/(obj1.velocity.y - obj2.velocity.y)
-##                        TBt = (obj1.position.y - obj1.rect.height/2 - obj2.position.y - obj2.rect.height/2)/(obj2.velocity.y - obj1.velocity.y)
-##                else:
-##                    BTa = obj2.accel.y/2
-##                    BTb = obj2.velocity.y - obj1.velocity.y
-##                    BTc = obj2.position.y - obj2.rect.height/2 - obj1.position.y - obj1.rect.height/2
-##                    BTd = (BTb**2) - (4*BTa*BTc)
-##                    if BTd >= 0:
-##                        BTt = min(x for x in [(-BTb+math.sqrt(BTd))/(2*BTa),(-BTb-math.sqrt(BTd))/(2*BTa)] if x >= 0)
-##                    TBa = BTa
-##                    TBb = obj2.velocity.y - obj1.velocity.y
-##                    TBc = obj2.position.y + obj2.rect.height/2 - obj1.position.y + obj1.rect.height/2
-##                    TBd = (TBb**2) - (4*TBa*TBc)
-##                    if TBd >= 0:
-##                        TBt = min(x for x in [(-TBb+math.sqrt(TBd))/(2*TBa),(-TBb-math.sqrt(TBd))/(2*TBa)] if x >= 0)
-##            else:
-##                if obj2.accel.y == 0:
-##                    BTa = obj1.accel.y/2
-##                    BTb = obj1.velocity.y - obj2.velocity.y
-##                    BTc = obj1.position.y + obj1.rect.height/2 - obj2.position.y + obj2.rect.height/2
-##                    BTd = (BTb**2) - (4*BTa*BTc)
-##                    if BTd >= 0:
-##                        BTt = min(x for x in [(-BTb+math.sqrt(BTd))/(2*BTa),(-BTb-math.sqrt(BTd))/(2*BTa)] if x >= 0)
-##                    TBa = BTa
-##                    TBb = obj1.velocity.y - obj2.velocity.y
-##                    TBc = obj1.position.y - obj1.rect.height/2 - obj2.position.y - obj2.rect.height/2
-##                    TBd = (TBb**2) - (4*TBa*TBc)
-##                    if TBd >= 0:
-##                        TBt = min(x for x in [(-TBb+math.sqrt(TBd))/(2*TBa),(-TBb-math.sqrt(TBd))/(2*TBa)] if x >= 0)
-##                else:
-##                    if obj1.accel.y == obj2.accel.y:
-##                        BTt = (obj2.position.y - obj2.rect.height/2 - obj1.position.y - obj1.rect.height/2) / (obj2.velocity.y - obj1.velocity.y)
-##                        TBt = (obj2.position.y + obj2.rect.height/2 - obj1.position.y + obj1.rect.height/2) / (obj2.velocity.y - obj1.velocity.y)
-##                    else:
-##                        BTa = (obj2.accel.y - obj1.accel.y)/2
-##                        BTb = obj2.velocity.y - obj1.velocity.y
-##                        BTc = obj2.position.y - obj2.rect.height/2 - obj1.position.y - obj1.rect.height/2
-##                        BTd = (BTb**2) - (4*BTa*BTc)
-##                        if BTd >= 0:
-##                            BTt = min(x for x in [(-BTb+math.sqrt(BTd))/(2*BTa),(-BTb-math.sqrt(BTd))/(2*BTa)] if x >= 0)
-##                        TBa = (obj2.accel.y - obj1.accel.y)/2
-##                        TBb = obj2.velocity.y - obj1.velocity.y
-##                        TBc = obj2.position.y + obj2.rect.height/2 - obj1.position.y + obj1.rect.height/2
-##                        TBd = (TBb**2) - (4*TBa*TBc)
-##                        if TBd >= 0:
-##                            TBt = min(x for x in [(-TBb+math.sqrt(TBd))/(2*TBa),(-TBb-math.sqrt(TBd))/(2*TBa)] if x >= 0)
-##            try:
-##                BTcol[o1].append(min(x for x in [BTt,TBt] if x >= 0))
-##                BTcol[o2].append(min(x for x in [BTt,TBt] if x >= 0))
-##            except:
-##                BTcol[o1].append(None)
-##                BTcol[o1].append(None)
-##        #print RLcol
-##        #print BTcol
+        for o1,o2 in collisions:
+            obj1 = this.objects[o1]
+            obj2 = this.objects[o2]
+            if obj1.velocity.x == obj2.velocity.x:
+                RLt = None
+                LRt = None
+            else:
+                RLt = (obj2.position.x - obj2.rect.width/2 - obj1.position.x - obj1.rect.width/2)/(obj1.velocity.x - obj2.velocity.x)
+                LRt = (obj1.position.x - obj1.rect.width/2 - obj2.position.x - obj2.rect.width/2)/(obj2.velocity.x - obj1.velocity.x)
+                        
+            if obj1.velocity.y == obj2.velocity.y:
+                BTt = None
+                TBt = None
+            else:
+                BTt = (obj2.position.y - obj2.rect.height/2 - obj1.position.y - obj1.rect.height/2)/(obj1.velocity.y - obj2.velocity.y)
+                TBt = (obj1.position.y - obj1.rect.height/2 - obj2.position.y - obj2.rect.height/2)/(obj2.velocity.y - obj1.velocity.y)
+            if 0 <= RLt <= 1:
+                obj1.position.x += obj1.velocity.x*RLt
+                obj2.position.x = obj1.position.x + obj1.rect.width/2 + obj2.rect.width/2
+                obj1.velocity.x, obj2.velocity.x = (obj1.velocity.x*(obj1.mass - obj2.mass) + 2*obj2.mass*obj2.velocity.x) / (obj1.mass + obj2.mass), (obj2.velocity.x*(obj2.mass - obj1.mass) + 2*obj1.mass*obj1.velocity.x) / (obj2.mass + obj1.mass)
+                timeLeft = 1 - RLt
+            elif 0 <= LRt <= 1:
+                obj1.position.x += obj1.velocity.x*LRt
+                obj2.position.x = obj1.position.x - (obj1.rect.width/2 + obj2.rect.width/2)
+                obj1.velocity.x, obj2.velocity.x = (obj1.velocity.x*(obj1.mass - obj2.mass) + 2*obj2.mass*obj2.velocity.x) / (obj1.mass + obj2.mass), (obj2.velocity.x*(obj2.mass - obj1.mass) + 2*obj1.mass*obj1.velocity.x) / (obj2.mass + obj1.mass)
+                timeLeft = 1 - LRt
+            elif 0 <= BTt <= 1:
+                obj1.position.y += obj1.velocity.x*BTt
+                obj2.position.y = obj1.position.y + obj1.rect.height/2 + obj2.rect.width/2
+                obj1.velocity.y, obj2.velocity.y = (obj1.velocity.y*(obj1.mass - obj2.mass) + 2*obj2.mass*obj2.velocity.y) / (obj1.mass + obj2.mass), (obj2.velocity.y*(obj2.mass - obj1.mass) + 2*obj1.mass*obj1.velocity.y) / (obj2.mass + obj1.mass)
+                timeLeft = 1 - BTt
+            elif 0 <= TBt <= 1:
+                obj1.position.y += obj1.velocity.x*TBt
+                obj2.position.y = obj1.position.y - (obj1.rect.height/2 + obj2.rect.width/2)
+                obj1.velocity.y, obj2.velocity.y = (obj1.velocity.y*(obj1.mass - obj2.mass) + 2*obj2.mass*obj2.velocity.y) / (obj1.mass + obj2.mass), (obj2.velocity.y*(obj2.mass - obj1.mass) + 2*obj1.mass*obj1.velocity.y) / (obj2.mass + obj1.mass)
+                timeLeft = 1 - TBt
+            else:
+                timeLeft = 1
+
+
+            obj1.position += obj1.velocity.scalarMultiply(timeLeft)
+            
+            obj1.rect.center = obj1.position.get()
+            obj2.rect.center = obj2.position.get()
+                
+        #print RLcol
+        #print BTcol
                 
             
             
@@ -249,9 +168,12 @@ class ObjectManager:
     def draw(this):
         objectScreen.fill((255,255,255))
         for o in this.aliveObjects:
-            this.objects[o].draw()
+            if focus == o:
+                this.objects[o].draw((255,0,0))
+            else:
+                this.objects[o].draw()
         if focus != -1:
-            crop = pygame.transform.smoothscale(objectScreen.subsurface(this.objects[focus].rect.inflate((464-this.objects[focus].rect.width)/this.zoom,(600-this.objects[focus].rect.height)/this.zoom).clamp(objectScreen.get_rect())), (484,600))
+            crop = pygame.transform.smoothscale(objectScreen.subsurface(this.objects[focus].rect.inflate((464-this.objects[focus].rect.width)/this.zoom,(600-this.objects[focus].rect.height)/this.zoom).clamp(objectScreen.get_rect())), (464,600))
             screen.blit(crop,(0,0))
         else:
             screen.blit(objectScreen, (0,0))
@@ -344,34 +266,53 @@ class Textbox:
         screen.blit(this.rendered, this.textpos)
 
 
-class Graph:
-    def __init__(this, rect, yScale): #domain is a tuple (l,h) where l<=x<h
-        this.rect = rect
-        this.yScale = yScale
-    
-    def refunc(this, newfunc, domain, offset):
-        this.fx = []
-        this.xScale = float((domain[1]-domain[0]))/(this.rect.width-2)
-        this.yScale = float(this.rect.height)/sHeight
-        this.offset = offset
-        this.func = newfunc
-        this.steps = 0
-        for rx in range(1,this.rect.width-1):
-            x = rx*this.xScale
-            this.fx.append(this.rect.top+int(this.yScale*eval(newfunc)))
+##class Graph: old, predictive
+##    def __init__(this, rect, yScale): #domain is a tuple (l,h) where l<=x<h
+##        this.rect = rect
+##        this.yScale = yScale
+##    
+##    def refunc(this, newfunc, domain, offset):
+##        this.fx = []
+##        this.xScale = float((domain[1]-domain[0]))/(this.rect.width-2)
+##        this.yScale = float(this.rect.height)/sHeight
+##        this.offset = offset
+##        this.func = newfunc
+##        this.steps = 0
+##        for rx in range(1,this.rect.width-1):
+##            x = rx*this.xScale
+##            this.fx.append(this.rect.top+int(this.yScale*eval(newfunc)))
+##
+##    def step(this):
+##        for _ in range(int(1.0/this.xScale)):
+##            this.fx.pop(0)
+##            x = this.xScale*(this.steps + this.rect.width-2)
+##            this.fx.append(this.rect.top+int(this.yScale*eval(this.func)))
+##            this.steps += 1
+##        
+##    def draw(this):
+##        pygame.draw.rect(screen, (0,0,0), this.rect, 1)
+##        for rx in range(this.rect.width-3):
+##            pygame.draw.line(screen,(0,0,0),(rx+this.rect.left,this.fx[rx]),(rx+this.rect.left+1,this.fx[rx+1]),1)
+##        pygame.draw.line(screen, (255,0,0), (0,this.fx[0]), (1023,this.fx[0]), 1)
 
-    def step(this):
-        for _ in range(int(1.0/this.xScale)):
-            this.fx.pop(0)
-            x = this.xScale*(this.steps + this.rect.width-2)
-            this.fx.append(this.rect.top+int(this.yScale*eval(this.func)))
-            this.steps += 1
-        
+
+class Graph:
+    def __init__(this, rect):
+        this.rect = rect
+        this.data = []
+    def clear(this):
+        this.data = []
+    def add(this, data):
+        this.data.append(data)
     def draw(this):
         pygame.draw.rect(screen, (0,0,0), this.rect, 1)
-        for rx in range(this.rect.width-3):
-            pygame.draw.line(screen,(0,0,0),(rx+this.rect.left,this.fx[rx]),(rx+this.rect.left+1,this.fx[rx+1]),1)
-        pygame.draw.line(screen, (255,0,0), (0,this.fx[0]), (1023,this.fx[0]), 1)
+        offset = len(this.data)-this.rect.width
+        if offset < 0:
+            offset = 0
+        for x in range(len(this.data)-this.rect.width, len(this.data)-2):
+            if x>=0:
+                pygame.draw.line(screen,(0,0,0),(x+this.rect.left - offset,this.rect.bottom - this.data[x]),(x+this.rect.left+1 - offset,this.rect.bottom - this.data[x+1]),1)
+        pygame.draw.line(screen, (255,0,0), (0,this.data[-1]), (1023,this.data[-1]), 1)
 
 class Slider:
     def __init__(this, low, high, start, interval, rect):
@@ -438,14 +379,13 @@ class Properter:
         this.textbox["velocity.x"] = Textbox(pygame.Rect((30,120), (40,17)), "")
         this.textbox["velocity.y"] = Textbox(pygame.Rect((80,120), (40,17)), "")
 
-        
 
         graphRect = pygame.Rect(464, 40, 560, 560)
         this.graph = {}
-        this.graph["position.x"] = Graph(graphRect, 5)
-        this.graph["position.y"] = Graph(graphRect, 5)
-        this.graph["velocity.x"] = Graph(graphRect, 5)
-        this.graph["velocity.y"] = Graph(graphRect, 5)
+        this.graph["position.x"] = Graph(graphRect)
+        this.graph["position.y"] = Graph(graphRect)
+        this.graph["velocity.x"] = Graph(graphRect)
+        this.graph["velocity.y"] = Graph(graphRect)
 
         this.tab = {}
         this.tab["position.x"] = Tab(pygame.Rect(464, 9, 125, 30), "x position")
@@ -460,17 +400,28 @@ class Properter:
     def focus(this, obj):
         this.updateC()
         this.obj = obj
+        this.clearGraphs()
         this.update()
-        if this.textboxon:
-            this.updateGraphs()
         
     def updateTextBoxes(this):
         for t in this.textbox:
             this.textbox[t].update(str(round(eval("this.obj."+t), 1)))
 
     def updateGraphs(this):
-        possibleF = this.obj.getFunction(this.textboxon)
-        this.graph[this.textboxon].refunc(this.obj.getFunction(this.textboxon),(0,60),(1,1))
+        for g in this.graph:
+            rawData = eval("this.obj."+g)
+            if g == "position.x":
+                this.graph[g].add(rawData*0.546875)
+            elif g == "position.y":
+                this.graph[g].add(rawData*(14.0/15.0))
+            elif g == "velocity.x":
+                this.graph[g].add(rawData*(56.0/3.0))
+            elif g == "velocity.y":
+                this.graph[g].add(rawData*(56.0/3.0))
+
+    def clearGraphs(this):
+        for g in this.graph:
+            this.graph[g].clear()
 
     def draw(this):
         for t in this.textbox:
@@ -501,7 +452,6 @@ class Properter:
                     this.textbox[this.textboxon].turnOff()
                 this.textbox[t].turnOn()
                 this.textboxon = t
-                this.updateGraphs()
                 return True
             if this.tab[t].click(click):
                 for off in this.tab:
@@ -512,7 +462,6 @@ class Properter:
                     this.textbox[this.textboxon].turnOff()
                 this.textbox[t].turnOn()
                 this.textboxon = t
-                this.updateGraphs()
                 return True
         if this.textboxon:
             this.closeTextBox()
@@ -535,15 +484,9 @@ class Properter:
             this.textbox[this.textboxon].assault(event.unicode)
         return False
         
-            
     def update(this):
         this.updateTextBoxes()
-        if this.textboxon:
-            if this.obj.collided or ticker%10==0:
-                this.obj.collided = False
-                this.updateGraphs()
-            else:
-                this.graph[this.textboxon].step()
+        this.updateGraphs()
     
     def updateC(this):
         objectmanager.zoom = this.zoomSlider.getValue()
@@ -572,24 +515,10 @@ ACCEL = Vector2(0, 9.8/FPS)
 
 objectmanager = ObjectManager()
 
-objectmanager.add(Object(Vector2(50,100), Vector2(10,-2), ACCEL, (25,25), 1.0, 1.0, 1.0))
-objectmanager.add(Object(Vector2(500,120), Vector2(-7.3,-3), ACCEL, (25,25), 1.0, 1.0, 1.0))
-
-objectmanager.add(Object(Vector2(50,400), Vector2(30,-5), ACCEL, (25,25), 1.0, 1.0, 1.0))
-objectmanager.add(Object(Vector2(500,400), Vector2(-30,-5), ACCEL, (25,25), 1.0, 1.0, 1.0))
-
-objectmanager.add(Object(Vector2(50,300), Vector2(40,-13), ACCEL, (25,25), 1.0, 1.0, 1.0))
-objectmanager.add(Object(Vector2(720,300), Vector2(-40,-15), ACCEL, (25,25), 1.0, 1.0, 1.0))
-
-objectmanager.add(Object(Vector2(640,100), Vector2(0,-1), ACCEL, (25,25), 1.0, 1.0, 1.0))
-
-objectmanager.add(Object(Vector2(650,500), Vector2(0,0), Vector2(0,0), (25,25), 1.0, 1.0, 1.0))
-
-objectmanager.add(Object(Vector2(650,550), Vector2(0,0), ACCEL, (25,25), 1.0, 1.0, 0.90))
-
-objectmanager.add(Object(Vector2(300,500), Vector2(0,-14), ACCEL, (25,25), 1.0, 1.0, 1.0))
-objectmanager.add(Object(Vector2(680,25), Vector2(0,0), ACCEL, (25,25), 1.0, 1.0, 1.0))
-objectmanager.add(Object(Vector2(720,25), Vector2(0,0), ACCEL, (25,25), 1.0, 1.0, 1.0))
+##for x in range(100):
+##    objectmanager.add(Object(Vector2(randint(100,900), randint(100,500)), Vector2(randint(-10,10), randint(-10,10)), ACCEL, (5, 5), randint(1,10), 1.0, 1.0))
+for x in range(1,150):
+    objectmanager.add(Object(Vector2(x*6, 100 + x*2), Vector2(1,0), ACCEL, (5,5), x, 1.0, 1.0))
                   
 
 properter = Properter()
@@ -604,6 +533,7 @@ clickRelease = 0#0 : unset
                 #1 : properter.zoomSlider.move(pos)
 
 while running:
+    print ticker
     ticker += 1
     screen.fill((255,255,255))
     #update
