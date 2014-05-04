@@ -413,11 +413,11 @@ class Properter:
             if g == "position.x":
                 this.graph[g].add(rawData*0.546875)
             elif g == "position.y":
-                this.graph[g].add(rawData*(14.0/15.0))
+                this.graph[g].add((sHeight-rawData)*(14.0/15.0))
             elif g == "velocity.x":
-                this.graph[g].add(rawData*(56.0/3.0))
+                this.graph[g].add((rawData+30)*(56.0/6.0))
             elif g == "velocity.y":
-                this.graph[g].add(rawData*(56.0/3.0))
+                this.graph[g].add((rawData+30)*(56.0/6.0))
 
     def clearGraphs(this):
         for g in this.graph:
@@ -515,10 +515,10 @@ ACCEL = Vector2(0, 9.8/FPS)
 
 objectmanager = ObjectManager()
 
-##for x in range(100):
-##    objectmanager.add(Object(Vector2(randint(100,900), randint(100,500)), Vector2(randint(-10,10), randint(-10,10)), ACCEL, (5, 5), randint(1,10), 1.0, 1.0))
-for x in range(1,150):
-    objectmanager.add(Object(Vector2(x*6, 100 + x*2), Vector2(1,0), ACCEL, (5,5), x, 1.0, 1.0))
+for x in range(100):
+    objectmanager.add(Object(Vector2(randint(100,900), randint(100,500)), Vector2(randint(-10,10), randint(-10,10)), ACCEL, (5, 5), randint(1,10), 1.0, 1.0))
+##for x in range(1,150):
+##    objectmanager.add(Object(Vector2(x*6, 100 + x*2), Vector2(1,0), ACCEL, (5,5), 1.0, 1.0, 1.0))
                   
 
 properter = Properter()
@@ -533,7 +533,8 @@ clickRelease = 0#0 : unset
                 #1 : properter.zoomSlider.move(pos)
 
 while running:
-    print ticker
+    if ticker%30==0:
+        print ticker/30
     ticker += 1
     screen.fill((255,255,255))
     #update
