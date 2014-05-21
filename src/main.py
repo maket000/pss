@@ -34,7 +34,7 @@ class Vector2:
         return Vector2(this.x*n, this.y*n)
 
 class Object:
-    def __init__(this, position, velocity, accel, size, mass, friction, spring): #Vector2, Vector2, Vector2, (int,int), float, float, float
+    def __init__(this, position, velocity, accel, size, mass, friction, spring, charge): #Vector2, Vector2, Vector2, (int,int), float, float, float
         this.position = position
         this.velocity = velocity
         this.lastPosition = copy.copy(this.position)
@@ -45,15 +45,21 @@ class Object:
         this.mass = mass
         this.friction = friction
         this.spring = spring
+        this.charge = charge
         this.collided = False #MAKE THIS TRUE IF COLLIDE
     def update(this):
         this.lastPosition = copy.copy(this.position)
         this.lastVelocity = copy.copy(this.velocity)
         this.velocity += this.accel
         this.position += this.velocity
-        if this.position.y + this.rect.height/2.0 >= sHeight:
-            this.position.y -= 2*((this.position.y+this.rect.height/2) - sHeight)
+        if this.position.y + this.rect.height/2.0 >= sHeight: #####BAD
+            over = (this.position.y+this.rect.height/2) - sHeight - 1
+            this.position.y -= this.velocity.y
+            this.velocity.y -= this.accel.y
+            this.velocity.y = math.sqrt(abs(this.velocity.y**2 + 2*this.accel.y*(sHeight - 1 - this.position.y)))
             this.velocity.y *= -this.spring
+            this.velocity.y = -math.sqrt(this.velocity.y**2 + 2*this.accel.y*over)
+            this.position.y = sHeight - 1 - over
         if this.position.x + this.rect.width/2.0 >= sWidth:
             this.position.x -= 2*((this.position.x+this.rect.width/2) - sWidth)
             this.velocity.x *= -this.spring
@@ -68,18 +74,10 @@ class Object:
     def draw(this, color=(0,0,0)):
         pygame.draw.rect(objectScreen, color, this.rect, 1)
 
-    def getFunction(this, value):
-        if value == "position.x":
-            return "(("+str(this.accel.x)+"/2)*(x**2))+("+str(this.velocity.x)+"*x)+"+str(this.position.x)
-        if value == "position.y":
-            return "(("+str(this.accel.y)+"/2)*(x**2))+("+str(this.velocity.y)+"*x)+"+str(this.position.y)
-        if value == "velocity.x":
-            return str(this.velocity.x)+"+("+str(this.accel.x)+"*x)"
-        if value == "velocity.y":
-            return str(this.velocity.y)+"+("+str(this.accel.y)+"*x)"
 
 class ObjectManager:
     def __init__(this):
+        this.nbadcol = 0
         this.objects = []
         this.aliveObjects = []
         this.zoom = 1
@@ -93,8 +91,12 @@ class ObjectManager:
         return False
     
     def update(this):
-        for o in this.aliveObjects: #updates
-            this.objects[o].update()
+        
+        for o1 in range(len(this.aliveObjects)): #updates
+            for o2 in range(o1+1,len(this.aliveObjects)):
+                this.objects[this.aliveObjects[o1]].magnetize(this.objects[this.aliveObjects[o2]])
+                this.objects[this.aliveObjects[o2]].magnetize(this.objects[this.aliveObjects[o1]])                
+            this.objects[this.aliveObjects[o1]].update()
         
         collisions = []
         toRevert = []
@@ -151,7 +153,8 @@ class ObjectManager:
                 obj1.velocity.y, obj2.velocity.y = (obj1.velocity.y*(obj1.mass - obj2.mass) + 2*obj2.mass*obj2.velocity.y) / (obj1.mass + obj2.mass), (obj2.velocity.y*(obj2.mass - obj1.mass) + 2*obj1.mass*obj1.velocity.y) / (obj2.mass + obj1.mass)
                 timeLeft = 1 - TBt
             else:
-                timeLeft = 1
+                this.nbadcol += 1
+                timeLeft = 1 #nononono
 
 
             obj1.position += obj1.velocity.scalarMultiply(timeLeft)
@@ -173,7 +176,10 @@ class ObjectManager:
             else:
                 this.objects[o].draw()
         if focus != -1:
-            crop = pygame.transform.smoothscale(objectScreen.subsurface(this.objects[focus].rect.inflate((464-this.objects[focus].rect.width)/this.zoom,(600-this.objects[focus].rect.height)/this.zoom).clamp(objectScreen.get_rect())), (464,600))
+            if graphing:
+                crop = pygame.transform.smoothscale(objectScreen.subsurface(this.objects[focus].rect.inflate((464-this.objects[focus].rect.width)/this.zoom,(600-this.objects[focus].rect.height)/this.zoom).clamp(objectScreen.get_rect())), (464,600))
+            else:
+                crop = pygame.transform.smoothscale(objectScreen.subsurface(this.objects[focus].rect.inflate((1024-this.objects[focus].rect.width)/this.zoom,(600-this.objects[focus].rect.height)/this.zoom).clamp(objectScreen.get_rect())), (1024,600))
             screen.blit(crop,(0,0))
         else:
             screen.blit(objectScreen, (0,0))
@@ -189,6 +195,11 @@ class ObjectManager:
                 if this.objects[i].rect.collidepoint(pos):
                     return i
         return -1
+    def stickARectInTheCurrentlyExistingRectsPleaseIfPossibleIfNotReturnFalse(this,rect):
+        for i in this.aliveObjects:
+            if this.objects[i].rect.colliderect(rect):
+                return False
+        return True
 
 class Tab:
     def __init__(this, rect, text):
@@ -221,6 +232,19 @@ class Textbox:
         this.cursor = 0
         this.altered = False
         this.render()
+    def parseInput(this, event):
+        if event.key == 8:
+            this.backspace()
+        elif event.key == 127:
+            this.delete()
+        elif event.key == 13:
+            this.turnOff()
+        elif event.key == 275:
+            this.cursorMove(True)
+        elif event.key == 276:
+            this.cursorMove(False)
+        else:
+            this.assault(event.unicode)
     def turnOn(this):
         this.on = True
         this.cursor = 0
@@ -266,36 +290,6 @@ class Textbox:
         screen.blit(this.rendered, this.textpos)
 
 
-##class Graph: old, predictive
-##    def __init__(this, rect, yScale): #domain is a tuple (l,h) where l<=x<h
-##        this.rect = rect
-##        this.yScale = yScale
-##    
-##    def refunc(this, newfunc, domain, offset):
-##        this.fx = []
-##        this.xScale = float((domain[1]-domain[0]))/(this.rect.width-2)
-##        this.yScale = float(this.rect.height)/sHeight
-##        this.offset = offset
-##        this.func = newfunc
-##        this.steps = 0
-##        for rx in range(1,this.rect.width-1):
-##            x = rx*this.xScale
-##            this.fx.append(this.rect.top+int(this.yScale*eval(newfunc)))
-##
-##    def step(this):
-##        for _ in range(int(1.0/this.xScale)):
-##            this.fx.pop(0)
-##            x = this.xScale*(this.steps + this.rect.width-2)
-##            this.fx.append(this.rect.top+int(this.yScale*eval(this.func)))
-##            this.steps += 1
-##        
-##    def draw(this):
-##        pygame.draw.rect(screen, (0,0,0), this.rect, 1)
-##        for rx in range(this.rect.width-3):
-##            pygame.draw.line(screen,(0,0,0),(rx+this.rect.left,this.fx[rx]),(rx+this.rect.left+1,this.fx[rx+1]),1)
-##        pygame.draw.line(screen, (255,0,0), (0,this.fx[0]), (1023,this.fx[0]), 1)
-
-
 class Graph:
     def __init__(this, rect):
         this.rect = rect
@@ -312,7 +306,7 @@ class Graph:
         for x in range(len(this.data)-this.rect.width, len(this.data)-2):
             if x>=0:
                 pygame.draw.line(screen,(0,0,0),(x+this.rect.left - offset,this.rect.bottom - this.data[x]),(x+this.rect.left+1 - offset,this.rect.bottom - this.data[x+1]),1)
-        pygame.draw.line(screen, (255,0,0), (0,this.data[-1]), (1023,this.data[-1]), 1)
+        #pygame.draw.line(screen, (255,0,0), (this.rect.left+1,this.rect.bottom - this.data[-1]), (this.rect.right-1, this.rect.bottom - this.data[-1]), 1)
 
 class Slider:
     def __init__(this, low, high, start, interval, rect):
@@ -393,9 +387,13 @@ class Properter:
         this.tab["velocity.x"] = Tab(pygame.Rect(716, 9, 125, 30), "x velocity")
         this.tab["velocity.y"] = Tab(pygame.Rect(842, 9, 125, 30), "y velocity")
 
+        this.graphToggle = checkBoxImg[0].get_rect().move(100,10)
+        this.newBoxButton = newBlockImg[0].get_rect().move(130,10)
+
         this.zoomSlider = Slider(1, 4, 2, 0.5, pygame.Rect(10, 10, 80, 20))
         
         this.textboxon = False
+        this.newBoxer = newboxer()
         
     def focus(this, obj):
         this.updateC()
@@ -404,8 +402,9 @@ class Properter:
         this.update()
         
     def updateTextBoxes(this):
-        for t in this.textbox:
-            this.textbox[t].update(str(round(eval("this.obj."+t), 1)))
+        if focus != -1:
+            for t in this.textbox:
+                this.textbox[t].update(str(round(eval("this.obj."+t), 1)))
 
     def updateGraphs(this):
         for g in this.graph:
@@ -417,7 +416,7 @@ class Properter:
             elif g == "velocity.x":
                 this.graph[g].add((rawData+30)*(56.0/6.0))
             elif g == "velocity.y":
-                this.graph[g].add((rawData+30)*(56.0/6.0))
+                this.graph[g].add((-rawData+30)*(56.0/6.0))
 
     def clearGraphs(this):
         for g in this.graph:
@@ -426,13 +425,19 @@ class Properter:
     def draw(this):
         for t in this.textbox:
             this.textbox[t].draw()
-            if t == this.textboxon:
-                this.tab[t].draw(True)
-            else:
-                this.tab[t].draw(False)
-        if this.textboxon:
-            this.graph[this.textboxon].draw()
+        if graphing:
+            for t in this.tab:
+                if t == this.textboxon:
+                    this.tab[t].draw(True)
+                else:
+                    this.tab[t].draw(False)
+            if this.textboxon:
+                this.graph[this.textboxon].draw()
         this.zoomSlider.draw()
+        screen.blit(checkBoxImg[graphing], this.graphToggle.topleft)
+        screen.blit(newBlockImg[newboxing], this.newBoxButton.topleft)
+        if newboxing:
+            this.newBoxer.draw()
 
     def closeTextBox(this):
         if re.match(numregex, this.textbox[this.textboxon].contents) and this.textbox[this.textboxon].altered:
@@ -441,47 +446,55 @@ class Properter:
             this.updateTextBoxes()
     
     def click(this, click):
-        slid = this.zoomSlider.click(click)
-        if slid:
-            this.updateC()
+        if newboxing:
+            this.newBoxer.click(click)
             return True
-        for t in this.textbox:
-            if this.textbox[t].rect.collidepoint(click):
-                if this.textboxon:
-                    this.closeTextBox()
-                    this.textbox[this.textboxon].turnOff()
-                this.textbox[t].turnOn()
-                this.textboxon = t
+        else:
+            slid = this.zoomSlider.click(click)
+            if slid:
+                this.updateC()
                 return True
-            if this.tab[t].click(click):
-                for off in this.tab:
-                    if off != t:
-                        this.tab[off].on = False
-                if this.textboxon:
-                    this.closeTextBox()
-                    this.textbox[this.textboxon].turnOff()
-                this.textbox[t].turnOn()
-                this.textboxon = t
+            for t in this.textbox:
+                if this.textbox[t].rect.collidepoint(click):
+                    if this.textboxon:
+                        this.closeTextBox()
+                        this.textbox[this.textboxon].turnOff()
+                    this.textbox[t].turnOn()
+                    this.textboxon = t
+                    return True
+                if this.tab[t].click(click):
+                    for off in this.tab:
+                        if off != t:
+                            this.tab[off].on = False
+                    if this.textboxon:
+                        this.closeTextBox()
+                        this.textbox[this.textboxon].turnOff()
+                    this.textbox[t].turnOn()
+                    this.textboxon = t
+                    return True
+            if this.graphToggle.collidepoint(click):
+                global graphing
+                graphing = not graphing
                 return True
-        if this.textboxon:
-            this.closeTextBox()
-        return False
+            if this.newBoxButton.collidepoint(click):
+                global newboxing, paused, graphing
+                newboxing = True
+                paused = True
+                graphing = False
+                return True
+            if this.textboxon:
+                this.closeTextBox()
+            return False
     
     def keyit(this, event):
-        if event.key == 8 and paused:
-            this.textbox[this.textboxon].backspace()
-        elif event.key == 127 and paused:
-            this.textbox[this.textboxon].delete()
-        elif event.key == 13 and paused:
-            this.closeTextBox()
-            this.textbox[this.textboxon].turnOff()
-            this.textboxon = False
-        elif event.key == 275 and paused:
-            this.textbox[this.textboxon].cursorMove(True)
-        elif event.key == 276 and paused:
-            this.textbox[this.textboxon].cursorMove(False)
+        if newboxing and this.newBoxer.on:
+            this.newBoxer.box[this.newBoxer.on].parseInput(event)
+            this.newBoxer.erroring = False
         elif paused:
-            this.textbox[this.textboxon].assault(event.unicode)
+            this.textbox[this.textboxon].parseInput(event)
+            if event.key == 13:
+                this.closeTextBox()
+                this.textboxon = False
         return False
         
     def update(this):
@@ -492,6 +505,101 @@ class Properter:
         objectmanager.zoom = this.zoomSlider.getValue()
 
 
+class newboxer:
+    def __init__(this):
+        this.clear()
+
+        this.window = pygame.Surface((284,204))
+        this.window.fill((255,255,255))
+        pygame.draw.rect(this.window, (0,0,0), pygame.Rect(0,0,280,200), 2)
+        this.window.blit(fonts["textbox"].render("Position x:", 1, (0,0,0)), (10,10))
+        this.window.blit(fonts["textbox"].render("       y:", 1, (0,0,0)), (140,10))
+        this.window.blit(fonts["textbox"].render("Velocity x:", 1, (0,0,0)), (10,30))
+        this.window.blit(fonts["textbox"].render("       y:", 1, (0,0,0)), (140,30))
+        this.window.blit(fonts["textbox"].render("    Size w:", 1, (0,0,0)), (10,50))
+        this.window.blit(fonts["textbox"].render("       h:", 1, (0,0,0)), (140,50))
+        this.window.blit(fonts["textbox"].render("      Mass:", 1, (0,0,0)), (10,70))
+        this.window.blit(fonts["textbox"].render("  Charge:", 1, (0,0,0)), (140,70))
+        this.window.blit(fonts["textbox"].render("  Friction:", 1, (0,0,0)), (10,90))
+        this.window.blit(fonts["textbox"].render("  Spring:", 1, (0,0,0)), (140,90))
+        this.window.blit(xButtonImg, (265,0))
+        this.closeRect = pygame.Rect(445,10,16,16)
+
+        this.attack = Tab(pygame.Rect(220,150,200,40), "Create Object")
+        
+        
+        
+    def draw(this):
+        screen.blit(this.window, (180,10))
+        for t in this.box:
+            this.box[t].draw()
+        if this.erroring:
+            this.errorMessage.draw(True)
+        else:
+            this.attack.draw(True)
+    def click(this, point):
+        if this.closeRect.collidepoint(point):
+            this.clear()
+            global newboxing
+            newboxing = False
+        elif this.attack.click(point):
+            this.validate()
+        else:
+            for t in this.box:
+                if this.box[t].rect.collidepoint(point):
+                    if this.on:
+                        this.box[this.on].turnOff()
+                    this.box[t].turnOn()
+                    this.on = t
+
+    def validate(this):
+        for t in this.box:
+            if re.match(numregex, this.box[t].contents):
+                exec("this."+t+"=float(this.box[t].contents)")
+            else:
+                this.error("One or more of your inputs was invalid.")
+                return False
+        possible = pygame.Rect(0,0,this.sx,this.sy)
+        possible.center = (this.px,sHeight-this.py)
+        if not objectmanager.stickARectInTheCurrentlyExistingRectsPleaseIfPossibleIfNotReturnFalse(possible):
+            this.error("Collision")
+            return False
+        objectmanager.add(Object(Vector2(this.px,this.py), Vector2(this.vx,this.vy), ACCEL, (this.sx,this.sy), this.mass, this.friction, this.spring, this.charge))
+        this.clear()
+        global newboxing
+        newboxing = False
+
+    def error(this, message):
+        this.erroring = True
+        this.errorMessage = Tab(pygame.Rect(220,150,200,40), "Error: "+message)
+        
+    def clear(this):
+        this.px = 512
+        this.py = 300
+        this.vx = 0
+        this.vy = 0
+        this.sx = 24
+        this.sy = 24
+        this.mass = 10
+        this.charge = 0
+        this.friction = 0
+        this.spring = 1
+        
+        this.box = {}
+        this.box["px"] = Textbox(pygame.Rect((268,19), (40,17)), "512")
+        this.box["py"] = Textbox(pygame.Rect((385,19), (40,17)), "300")
+        this.box["vx"] = Textbox(pygame.Rect((268,39), (40,17)), "0")
+        this.box["vy"] = Textbox(pygame.Rect((385,39), (40,17)), "0")
+        this.box["sx"] = Textbox(pygame.Rect((268,59), (40,17)), "24")
+        this.box["sy"] = Textbox(pygame.Rect((385,59), (40,17)), "24")
+        this.box["mass"] = Textbox(pygame.Rect((268,79), (40,17)), "10")
+        this.box["charge"] = Textbox(pygame.Rect((385,79), (40,17)), "0")
+        this.box["friction"] = Textbox(pygame.Rect((268,99), (40,17)), "0")
+        this.box["spring"] = Textbox(pygame.Rect((385,99), (40,17)), "1")
+        this.on = False
+        this.erroring = False
+        
+        
 
 
 #Initializations
@@ -500,6 +608,19 @@ pygame.display.set_icon(pygame.image.load("res/img/icon.ico"))
 dimensions = sWidth, sHeight = 1024, 600
 screen = pygame.display.set_mode(dimensions)
 clock = pygame.time.Clock()
+
+
+checkBoxImg = {0:pygame.image.load("res/img/checkboxOff.png").convert_alpha(),
+               1:pygame.image.load("res/img/checkboxOn.png").convert_alpha()}
+
+newBlockImg = {0:pygame.image.load("res/img/newBlockUpS.png").convert_alpha(),
+               1:pygame.image.load("res/img/newBlockDepS.png").convert_alpha()}
+
+scrollBarImg = pygame.image.load("res/img/scrollBar.png").convert_alpha()
+
+xButtonImg = pygame.image.load("res/img/x.png").convert_alpha()
+               
+
 
 objectScreen = pygame.Surface(dimensions)
 
@@ -515,26 +636,30 @@ ACCEL = Vector2(0, 9.8/FPS)
 
 objectmanager = ObjectManager()
 
+
 for x in range(100):
-    objectmanager.add(Object(Vector2(randint(100,900), randint(100,500)), Vector2(randint(-10,10), randint(-10,10)), ACCEL, (5, 5), randint(1,10), 1.0, 1.0))
+    objectmanager.add(Object(Vector2(randint(100,900), randint(125,175)), Vector2(randint(-10,10), randint(-10,10)), ACCEL, (5, 5), randint(1,10), 1.0, 1.0, 0.0))
 ##for x in range(1,150):
 ##    objectmanager.add(Object(Vector2(x*6, 100 + x*2), Vector2(1,0), ACCEL, (5,5), 1.0, 1.0, 1.0))
-                  
+
+##objectmanager.add(Object(Vector2(100,400), Vector2(-1,2), ACCEL, (25,25), 50.0, 1.0, 1.0))
+objectmanager.add(Object(Vector2(100,489), Vector2(25,-10), ACCEL, (20,20), 200.0, 1.0, 1.0, 0.0))
 
 properter = Properter()
 
 running = True
-paused = False
+paused = True
 focus = -1
+graphing = False
+newboxing = False
 ticker = 0
 screen.fill((255,255,255))
+objectScreen.fill((255,255,255))
 
 clickRelease = 0#0 : unset
                 #1 : properter.zoomSlider.move(pos)
 
 while running:
-    if ticker%30==0:
-        print ticker/30
     ticker += 1
     screen.fill((255,255,255))
     #update
@@ -549,7 +674,7 @@ while running:
                 elif event.type == KEYDOWN:
                     if event.key == K_p:
                         paused = not paused
-                    if properter.textboxon:
+                    elif properter.textboxon or newboxing:
                         properter.keyit(event)
                 elif event.type == MOUSEBUTTONDOWN:
                     if event.button == 1:
@@ -570,13 +695,16 @@ while running:
                 if event.type == QUIT:
                     running = False
                 elif event.type == KEYDOWN:
-                    if event.key == K_p:
+                    if newboxing:
+                        properter.keyit(event)
+                    elif event.key == K_p:
                         paused = not paused
                 elif event.type == MOUSEBUTTONDOWN:
                     if event.button == 1:
-                        focus = objectmanager.click(event.pos)
-                        if focus != -1:
-                            properter.focus(objectmanager.objects[focus])
+                        if not properter.click(event.pos):
+                            focus = objectmanager.click(event.pos)
+                            if focus != -1:
+                                properter.focus(objectmanager.objects[focus])
     else:
         if focus != -1:
             #focused unpaused
@@ -585,9 +713,9 @@ while running:
                 if event.type == QUIT:
                     running = False
                 if event.type == KEYDOWN:
-                    if properter.textboxon:
+                    if properter.textboxon or newboxing:
                         properter.keyit(event)
-                    if event.key == K_p:
+                    elif event.key == K_p:
                         paused = not paused
                 elif event.type == MOUSEBUTTONDOWN:
                     if event.button == 1:
@@ -611,13 +739,16 @@ while running:
                 if event.type == QUIT:
                     running = False
                 elif event.type == KEYDOWN:
-                    if event.key == K_p:
+                    if newboxing:
+                        properter.keyit(event)
+                    elif event.key == K_p:
                         paused = not paused
                 elif event.type == MOUSEBUTTONDOWN:
                     if event.button == 1:
-                        focus = objectmanager.click(event.pos)
-                        if focus != -1:
-                            properter.focus(objectmanager.objects[focus])
+                        if not properter.click(event.pos):
+                            focus = objectmanager.click(event.pos)
+                            if focus != -1:
+                                properter.focus(objectmanager.objects[focus])
             objectmanager.update()
             
     if clickRelease:
@@ -626,10 +757,12 @@ while running:
             properter.updateC()
 
     
+    
     objectmanager.draw()
-    if focus != -1:
-        properter.draw()
+    properter.draw()
+
+    
     pygame.display.flip()
     clock.tick(FPS)
-    
+print "Number of bad collisions:",objectmanager.nbadcol
 pygame.quit()
