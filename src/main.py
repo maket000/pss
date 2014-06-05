@@ -22,6 +22,9 @@ class Vector2:
         return Vector2(-this.x, -this.y)
     def __abs__(this):
         return Vector2(abs(this.x), abs(this.y))
+    def unit(this):
+        m = this.magnitude()
+        return Vector2(this.x/m, this.y/m)
     def magnitude(this):
         return math.sqrt(this.x**2 + this.y**2)
     def angle(this):
@@ -34,7 +37,7 @@ class Vector2:
         return Vector2(this.x*n, this.y*n)
 
 class Object:
-    def __init__(this, position, velocity, accel, size, mass, friction, spring, charge): #Vector2, Vector2, Vector2, (int,int), float, float, float
+    def __init__(this, position, velocity, accel, size, mass, friction, spring, charge, fixed): #Vector2, Vector2, Vector2, (int,int), float, float, float
         this.position = position
         this.velocity = velocity
         this.lastPosition = copy.copy(this.position)
@@ -47,26 +50,39 @@ class Object:
         this.spring = spring
         this.charge = charge
         this.collided = False #MAKE THIS TRUE IF COLLIDE
+        this.fixed = fixed
+        if fixed:
+            this.velocity = Vector2(0,0)
+            this.accel = Vector2(0,0)
+
+    def magnetize(this, other):
+        diff = this.position-other.position
+        unit = diff.unit()
+        r = diff.magnitude()
+        eforce = (CK*this.charge*other.charge)/(r**2)
+        this.accel += unit.scalarMultiply(eforce/this.mass)
+        other.accel += -unit.scalarMultiply(eforce/other.mass)
+        
+        
     def update(this):
         this.lastPosition = copy.copy(this.position)
         this.lastVelocity = copy.copy(this.velocity)
-        this.velocity += this.accel
-        this.position += this.velocity
-        if this.position.y + this.rect.height/2.0 >= sHeight: #####BAD
-            over = (this.position.y+this.rect.height/2) - sHeight - 1
-            this.position.y -= this.velocity.y
-            this.velocity.y -= this.accel.y
-            this.velocity.y = math.sqrt(abs(this.velocity.y**2 + 2*this.accel.y*(sHeight - 1 - this.position.y)))
-            this.velocity.y *= -this.spring
-            this.velocity.y = -math.sqrt(this.velocity.y**2 + 2*this.accel.y*over)
-            this.position.y = sHeight - 1 - over
-        if this.position.x + this.rect.width/2.0 >= sWidth:
-            this.position.x -= 2*((this.position.x+this.rect.width/2) - sWidth)
-            this.velocity.x *= -this.spring
-        if this.position.x - this.rect.width/2.0 < 0:
-            this.position.x -= 2*((this.position.x-this.rect.width/2))
-            this.velocity.x *= -this.spring
+        if this.fixed:
+            this.velocity = Vector2(0,0)
+        else:
+            this.velocity += this.accel
+            this.position += this.velocity
+            if this.position.y + this.rect.height/2.0 >= sHeight: ##################################################################:(
+                this.velocity.y *= -this.spring
+                this.position.y += this.velocity.y
+            if this.position.x + this.rect.width/2.0 >= sWidth:
+                this.position.x -= 2*((this.position.x+this.rect.width/2) - sWidth)
+                this.velocity.x *= -this.spring
+            if this.position.x - this.rect.width/2.0 < 0:
+                this.position.x -= 2*((this.position.x-this.rect.width/2))
+                this.velocity.x *= -this.spring
         this.rect.center = this.position.get()
+        this.accel = copy.copy(ACCEL)
     def revert(this):
         this.position = copy.copy(this.lastPosition)
         this.velocity = copy.copy(this.lastVelocity)
@@ -94,9 +110,9 @@ class ObjectManager:
         
         for o1 in range(len(this.aliveObjects)): #updates
             for o2 in range(o1+1,len(this.aliveObjects)):
-                this.objects[this.aliveObjects[o1]].magnetize(this.objects[this.aliveObjects[o2]])
-                this.objects[this.aliveObjects[o2]].magnetize(this.objects[this.aliveObjects[o1]])                
-            this.objects[this.aliveObjects[o1]].update()
+                this.objects[this.aliveObjects[o1]].magnetize(this.objects[this.aliveObjects[o2]])              
+        for o in range(len(this.aliveObjects)):
+            this.objects[this.aliveObjects[o]].update()
         
         collisions = []
         toRevert = []
@@ -161,7 +177,6 @@ class ObjectManager:
             
             obj1.rect.center = obj1.position.get()
             obj2.rect.center = obj2.position.get()
-                
         #print RLcol
         #print BTcol
                 
@@ -319,6 +334,7 @@ class Slider:
         twid = rect.width / ticks
         this.notches = []
         this.values = []
+        this.ztext = fonts["textbox"].render("ZOOM", 1, (0,0,0))
         for x in range(ticks+1):
             this.notches.append((this.rect.left + x * twid, this.rect.centery))
             this.values.append(low + x*interval)
@@ -355,7 +371,7 @@ class Slider:
             
     
     def draw(this):
-        pygame.draw.rect(screen, (0,0,0), this.rect, 1)
+        screen.blit(scrollBoxImg, this.rect.topleft)
         pygame.draw.rect(screen, (100,0,0), this.slider, 2)
         
     def updateSlider(this):
@@ -368,10 +384,27 @@ class Properter:
     def __init__(this):
         this.obj = False
         this.textbox = {}
-        this.textbox["position.x"] = Textbox(pygame.Rect((30,100), (40,17)), "")
-        this.textbox["position.y"] = Textbox(pygame.Rect((80,100), (40,17)), "")
-        this.textbox["velocity.x"] = Textbox(pygame.Rect((30,120), (40,17)), "")
-        this.textbox["velocity.y"] = Textbox(pygame.Rect((80,120), (40,17)), "")
+        this.boxText = pygame.Surface((216,80))
+
+        this.textbox["position.x"] = Textbox(pygame.Rect((84,41), (40,17)), "")
+        this.textbox["position.y"] = Textbox(pygame.Rect((180,41), (40,17)), "")
+        this.textbox["velocity.x"] = Textbox(pygame.Rect((84,61), (40,17)), "")
+        this.textbox["velocity.y"] = Textbox(pygame.Rect((180,61), (40,17)), "")
+        this.textbox["mass"] = Textbox(pygame.Rect((84,81), (40,17)), "")
+        this.textbox["charge"] = Textbox(pygame.Rect((180,81), (40,17)), "")
+        this.textbox["friction"] = Textbox(pygame.Rect((84,101), (40,17)), "")
+        this.textbox["spring"] = Textbox(pygame.Rect((180,101), (40,17)), "")
+
+        this.boxText.fill((255,255,255))
+        pygame.draw.rect(this.boxText, (0,0,0), pygame.Rect(0,0,216,80), 1)
+        this.boxText.blit(fonts["textbox"].render("Position x:", 1, (0,0,0)), (1,2))
+        this.boxText.blit(fonts["textbox"].render("       y:", 1, (0,0,0)), (111,2))
+        this.boxText.blit(fonts["textbox"].render("Velocity x:", 1, (0,0,0)), (1,22))
+        this.boxText.blit(fonts["textbox"].render("       y:", 1, (0,0,0)), (111,22))
+        this.boxText.blit(fonts["textbox"].render("      Mass:", 1, (0,0,0)), (1,42))
+        this.boxText.blit(fonts["textbox"].render("  Charge:", 1, (0,0,0)), (111,42))
+        this.boxText.blit(fonts["textbox"].render("  Friction:", 1, (0,0,0)), (1,62))
+        this.boxText.blit(fonts["textbox"].render("  Spring:", 1, (0,0,0)), (111,62))
 
 
         graphRect = pygame.Rect(464, 40, 560, 560)
@@ -390,9 +423,10 @@ class Properter:
         this.graphToggle = checkBoxImg[0].get_rect().move(100,10)
         this.newBoxButton = newBlockImg[0].get_rect().move(130,10)
 
-        this.zoomSlider = Slider(1, 4, 2, 0.5, pygame.Rect(10, 10, 80, 20))
+        this.zoomSlider = Slider(1, 4, 0, 0.5, pygame.Rect(10, 10, 80, 20))
         
         this.textboxon = False
+        this.graphon = False
         this.newBoxer = newboxer()
         
     def focus(this, obj):
@@ -423,16 +457,18 @@ class Properter:
             this.graph[g].clear()
 
     def draw(this):
+        screen.blit(this.boxText, (5,40))
         for t in this.textbox:
             this.textbox[t].draw()
         if graphing:
+            if this.graphon:
+                this.graph[this.graphon].draw()
+                pygame.draw.rect(screen, (255,255,255), pygame.Rect(this.graph[this.graphon].rect.x,0,this.graph[this.graphon].rect.width, 40), 0)
             for t in this.tab:
-                if t == this.textboxon:
+                if t == this.graphon:
                     this.tab[t].draw(True)
                 else:
                     this.tab[t].draw(False)
-            if this.textboxon:
-                this.graph[this.textboxon].draw()
         this.zoomSlider.draw()
         screen.blit(checkBoxImg[graphing], this.graphToggle.topleft)
         screen.blit(newBlockImg[newboxing], this.newBoxButton.topleft)
@@ -460,17 +496,18 @@ class Properter:
                         this.closeTextBox()
                         this.textbox[this.textboxon].turnOff()
                     this.textbox[t].turnOn()
+                    this.textbox[t].cursor = len(this.textbox[t].contents)
                     this.textboxon = t
                     return True
+            for t in this.tab:
                 if this.tab[t].click(click):
                     for off in this.tab:
                         if off != t:
                             this.tab[off].on = False
-                    if this.textboxon:
-                        this.closeTextBox()
-                        this.textbox[this.textboxon].turnOff()
-                    this.textbox[t].turnOn()
-                    this.textboxon = t
+                    if t == this.graphon:
+                        this.graphon = False
+                    else:
+                        this.graphon = t
                     return True
             if this.graphToggle.collidepoint(click):
                 global graphing
@@ -550,6 +587,7 @@ class newboxer:
                     if this.on:
                         this.box[this.on].turnOff()
                     this.box[t].turnOn()
+                    this.box[t].cursor = len(this.box[t].contents)
                     this.on = t
 
     def validate(this):
@@ -564,7 +602,7 @@ class newboxer:
         if not objectmanager.stickARectInTheCurrentlyExistingRectsPleaseIfPossibleIfNotReturnFalse(possible):
             this.error("Collision")
             return False
-        objectmanager.add(Object(Vector2(this.px,this.py), Vector2(this.vx,this.vy), ACCEL, (this.sx,this.sy), this.mass, this.friction, this.spring, this.charge))
+        objectmanager.add(Object(Vector2(this.px,this.py), Vector2(this.vx,this.vy), ACCEL, (this.sx,this.sy), this.mass, this.friction, this.spring, this.charge, False))
         this.clear()
         global newboxing
         newboxing = False
@@ -592,7 +630,7 @@ class newboxer:
         this.box["vy"] = Textbox(pygame.Rect((385,39), (40,17)), "0")
         this.box["sx"] = Textbox(pygame.Rect((268,59), (40,17)), "24")
         this.box["sy"] = Textbox(pygame.Rect((385,59), (40,17)), "24")
-        this.box["mass"] = Textbox(pygame.Rect((268,79), (40,17)), "10")
+        this.box["mass"] = Textbox(pygame.Rect((268,79), (40,17)), "100")
         this.box["charge"] = Textbox(pygame.Rect((385,79), (40,17)), "0")
         this.box["friction"] = Textbox(pygame.Rect((268,99), (40,17)), "0")
         this.box["spring"] = Textbox(pygame.Rect((385,99), (40,17)), "1")
@@ -617,6 +655,7 @@ newBlockImg = {0:pygame.image.load("res/img/newBlockUpS.png").convert_alpha(),
                1:pygame.image.load("res/img/newBlockDepS.png").convert_alpha()}
 
 scrollBarImg = pygame.image.load("res/img/scrollBar.png").convert_alpha()
+scrollBoxImg = pygame.image.load("res/img/scrollBox.png").convert_alpha()
 
 xButtonImg = pygame.image.load("res/img/x.png").convert_alpha()
                
@@ -632,18 +671,20 @@ fonts["textbox"] = pygame.font.Font("res/font/Courier.ttf", 12)
 
 FPS = 30
 
+CK = 8.9875517873681764*10**9
 ACCEL = Vector2(0, 9.8/FPS)
 
 objectmanager = ObjectManager()
 
 
-for x in range(100):
-    objectmanager.add(Object(Vector2(randint(100,900), randint(125,175)), Vector2(randint(-10,10), randint(-10,10)), ACCEL, (5, 5), randint(1,10), 1.0, 1.0, 0.0))
-##for x in range(1,150):
-##    objectmanager.add(Object(Vector2(x*6, 100 + x*2), Vector2(1,0), ACCEL, (5,5), 1.0, 1.0, 1.0))
 
-##objectmanager.add(Object(Vector2(100,400), Vector2(-1,2), ACCEL, (25,25), 50.0, 1.0, 1.0))
-objectmanager.add(Object(Vector2(100,489), Vector2(25,-10), ACCEL, (20,20), 200.0, 1.0, 1.0, 0.0))
+#objectmanager.add(Object(Vector2(300,359), Vector2(0,0), ACCEL, (20,20), 5000.0, 1.0, 1.0, -0.01, False))
+for x in range(16):
+    objectmanager.add(Object(Vector2(32+x*64,25), Vector2(0,0), ACCEL, (64,50), 2000, 1.0, 1.0, 0.01, True))
+    objectmanager.add(Object(Vector2(32+x*64,575), Vector2(0,0), ACCEL, (64,50), 2000, 1.0, 1.0, 0.01, True))
+for x in range(1,11):
+    objectmanager.add(Object(Vector2(32,25+50*x), Vector2(0,0), ACCEL, (64,50), 2000, 1.0, 1.0, 0.01, True))
+    objectmanager.add(Object(Vector2(992,25+50*x), Vector2(0,0), ACCEL, (64,50), 2000, 1.0, 1.0, 0.01, True))
 
 properter = Properter()
 
@@ -713,7 +754,7 @@ while running:
                 if event.type == QUIT:
                     running = False
                 if event.type == KEYDOWN:
-                    if properter.textboxon or newboxing:
+                    if newboxing:
                         properter.keyit(event)
                     elif event.key == K_p:
                         paused = not paused
@@ -763,6 +804,6 @@ while running:
 
     
     pygame.display.flip()
-    clock.tick(FPS)
+    clock.tick(30)
 print "Number of bad collisions:",objectmanager.nbadcol
 pygame.quit()
