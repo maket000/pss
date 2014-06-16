@@ -24,6 +24,8 @@ class Vector2:
         return Vector2(abs(this.x), abs(this.y))
     def unit(this):
         m = this.magnitude()
+        if m == 0:
+            return Vector2(0,0)
         return Vector2(this.x/m, this.y/m)
     def magnitude(this):
         return math.sqrt(this.x**2 + this.y**2)
@@ -42,14 +44,14 @@ class Object:
         this.velocity = velocity
         this.lastPosition = copy.copy(this.position)
         this.lastVelocity = copy.copy(this.velocity)
-        this.accel = accel
+        this.accel = copy.copy(accel)
         this.rect = pygame.Rect((0,0), size)
         this.rect.center = this.position.get()
         this.mass = mass
         this.friction = friction
         this.spring = spring
         this.charge = charge
-        this.collided = False #MAKE THIS TRUE IF COLLIDE
+        this.collided = False #MAKE TRUE IF COLLIDE
         this.fixed = fixed
         if fixed:
             this.velocity = Vector2(0,0)
@@ -70,6 +72,9 @@ class Object:
         if this.fixed:
             this.velocity = Vector2(0,0)
         else:
+            if this.position.y + this.rect.height/2.0 >= sHeight:
+                this.position.y = sHeight - this.rect.height/2.0
+                this.velocity.y *= -1
             this.velocity += this.accel
             this.position += this.velocity
             if this.position.y + this.rect.height/2.0 >= sHeight: ##################################################################:(
@@ -82,7 +87,7 @@ class Object:
                 this.position.x -= 2*((this.position.x-this.rect.width/2))
                 this.velocity.x *= -this.spring
         this.rect.center = this.position.get()
-        this.accel = copy.copy(ACCEL)
+        #this.accel = copy.copy(ACCEL)################################################DO NOT USE################################################BREAKS COLLISIONS
     def revert(this):
         this.position = copy.copy(this.lastPosition)
         this.velocity = copy.copy(this.lastVelocity)
@@ -135,58 +140,127 @@ class ObjectManager:
         for o1,o2 in collisions:
             obj1 = this.objects[o1]
             obj2 = this.objects[o2]
-            if obj1.velocity.x == obj2.velocity.x:
+            if (obj1.velocity.x == obj2.velocity.x and obj1.accel.x == obj2.accel.x):
                 RLt = None
                 LRt = None
+            elif obj1.accel.x == obj2.accel.x:
+                RLt = (obj2.position.x - obj2.rect.width/2.0 - obj1.position.x - obj1.rect.width/2.0) / (obj1.velocity.x - obj2.velocity.x)
+                LRt = (obj1.position.x - obj1.rect.width/2.0 - obj2.position.x - obj2.rect.width/2.0) / (obj2.velocity.x - obj1.velocity.x)
             else:
-                RLt = (obj2.position.x - obj2.rect.width/2 - obj1.position.x - obj1.rect.width/2)/(obj1.velocity.x - obj2.velocity.x)
-                LRt = (obj1.position.x - obj1.rect.width/2 - obj2.position.x - obj2.rect.width/2)/(obj2.velocity.x - obj1.velocity.x)
+                try:
+                    t1 = ((obj1.velocity.x - obj2.velocity.x) + math.sqrt((obj1.velocity.x-obj2.velocity.x)**2 - 2*(obj1.accel.x-obj2.accel.x)*(obj1.position.x + obj1.rect.width/2.0 - obj2.position.x + obj2.rect.width/2.0))) / (obj1.accel.x - obj2.accel.x)
+                    t2 = ((obj1.velocity.x - obj2.velocity.x) - math.sqrt((obj1.velocity.x-obj2.velocity.x)**2 - 2*(obj1.accel.x-obj2.accel.x)*(obj1.position.x + obj1.rect.width/2.0 - obj2.position.x + obj2.rect.width/2.0))) / (obj1.accel.x - obj2.accel.x)
+                except:
+                    t1 = -1
+                    t2 = -1
+                RLt = []
+                if t1 > 0:
+                    RLt.append(t1)
+                if t2 > 0:
+                    RLt.append(t2)
+                if RLt:
+                    RLt = min(RLt)
+                else:
+                    RLt = None
+                
+                try:
+                    t1 = ((obj2.velocity.x - obj1.velocity.x) + math.sqrt((obj2.velocity.x-obj1.velocity.x)**2 - 2*(obj2.accel.x-obj1.accel.x)*(obj2.position.x + obj2.rect.width/2.0 - obj1.position.x + obj1.rect.width/2.0))) / (obj2.accel.x - obj1.accel.x)
+                    t2 = ((obj2.velocity.x - obj1.velocity.x) - math.sqrt((obj2.velocity.x-obj1.velocity.x)**2 - 2*(obj2.accel.x-obj1.accel.x)*(obj2.position.x + obj2.rect.width/2.0 - obj1.position.x + obj1.rect.width/2.0))) / (obj2.accel.x - obj1.accel.x)
+                except:
+                    t1 = -1
+                    t2 = -1
+                LRt = []
+                if t1 > 0:
+                    LRt.append(t1)
+                if t2 > 0:
+                    LRt.append(t2)
+                if LRt:
+                    LRt = min(LRt)
+                else:
+                    LRt = None
                         
-            if obj1.velocity.y == obj2.velocity.y:
+            if obj1.velocity.y == obj2.velocity.y and obj1.accel.y == obj2.accel.y:
                 BTt = None
                 TBt = None
+            elif obj1.accel.y == obj2.accel.y:
+                BTt = (obj2.position.y - obj2.rect.height/2.0 - obj1.position.y - obj1.rect.height/2.0) / (obj1.velocity.y - obj2.velocity.y)
+                TBt = (obj1.position.y - obj1.rect.height/2.0 - obj2.position.y - obj2.rect.height/2.0) / (obj2.velocity.y - obj1.velocity.y)
             else:
-                BTt = (obj2.position.y - obj2.rect.height/2 - obj1.position.y - obj1.rect.height/2)/(obj1.velocity.y - obj2.velocity.y)
-                TBt = (obj1.position.y - obj1.rect.height/2 - obj2.position.y - obj2.rect.height/2)/(obj2.velocity.y - obj1.velocity.y)
+                try:
+                    t1 = ((obj1.velocity.y - obj2.velocity.y) + math.sqrt((obj1.velocity.y-obj2.velocity.y)**2 - 2*(obj1.accel.y-obj2.accel.y)*(obj1.position.y + obj1.rect.height/2.0 - obj2.position.y + obj2.rect.height/2.0))) / (obj1.accel.y - obj2.accel.y)
+                    t2 = ((obj1.velocity.y - obj2.velocity.y) - math.sqrt((obj1.velocity.y-obj2.velocity.y)**2 - 2*(obj1.accel.y-obj2.accel.y)*(obj1.position.y + obj1.rect.height/2.0 - obj2.position.y + obj2.rect.height/2.0))) / (obj1.accel.y - obj2.accel.y)
+                except:
+                    t1 = -1
+                    t2 = -1
+                BTt = []
+                if t1 > 0:
+                    BTt.append(t1)
+                if t2 > 0:
+                    BTt.append(t2)
+                if BTt:
+                    BTt = min(BTt)
+                else:
+                    BTt = None
+                
+                try:
+                    t1 = ((obj2.velocity.y - obj1.velocity.y) + math.sqrt((obj2.velocity.y-obj1.velocity.y)**2 - 2*(obj2.accel.y-obj1.accel.y)*(obj2.position.y + obj2.rect.height/2.0 - obj1.position.y + obj1.rect.height/2.0))) / (obj2.accel.y - obj1.accel.y)
+                    t2 = ((obj2.velocity.y - obj1.velocity.y) - math.sqrt((obj2.velocity.y-obj1.velocity.y)**2 - 2*(obj2.accel.y-obj1.accel.y)*(obj2.position.y + obj2.rect.height/2.0 - obj1.position.y + obj1.rect.height/2.0))) / (obj2.accel.y - obj1.accel.y)
+                except:
+                    t1 = -1
+                    t2 = -1
+                TBt = []
+                if t1 > 0:
+                    TBt.append(t1)
+                if t2 > 0:
+                    TBt.append(t2)
+                if TBt:
+                    TBt = min(TBt)
+                else:
+                    TBt = None
+            #print RLt, LRt, BTt, TBt
             if 0 <= RLt <= 1:
-                obj1.position.x += obj1.velocity.x*RLt
+                obj1.position.x += obj1.velocity.x*RLt + 0.5*obj1.accel.x*RLt**2
                 obj2.position.x = obj1.position.x + obj1.rect.width/2 + obj2.rect.width/2
                 obj1.velocity.x, obj2.velocity.x = (obj1.velocity.x*(obj1.mass - obj2.mass) + 2*obj2.mass*obj2.velocity.x) / (obj1.mass + obj2.mass), (obj2.velocity.x*(obj2.mass - obj1.mass) + 2*obj1.mass*obj1.velocity.x) / (obj2.mass + obj1.mass)
                 timeLeft = 1 - RLt
             elif 0 <= LRt <= 1:
-                obj1.position.x += obj1.velocity.x*LRt
+                obj1.position.x += obj1.velocity.x*LRt + 0.5*obj1.accel.x*LRt**2
                 obj2.position.x = obj1.position.x - (obj1.rect.width/2 + obj2.rect.width/2)
                 obj1.velocity.x, obj2.velocity.x = (obj1.velocity.x*(obj1.mass - obj2.mass) + 2*obj2.mass*obj2.velocity.x) / (obj1.mass + obj2.mass), (obj2.velocity.x*(obj2.mass - obj1.mass) + 2*obj1.mass*obj1.velocity.x) / (obj2.mass + obj1.mass)
                 timeLeft = 1 - LRt
             elif 0 <= BTt <= 1:
-                obj1.position.y += obj1.velocity.x*BTt
+                obj1.position.y += obj1.velocity.x*BTt + 0.5*obj1.accel.y*BTt**2
                 obj2.position.y = obj1.position.y + obj1.rect.height/2 + obj2.rect.width/2
                 obj1.velocity.y, obj2.velocity.y = (obj1.velocity.y*(obj1.mass - obj2.mass) + 2*obj2.mass*obj2.velocity.y) / (obj1.mass + obj2.mass), (obj2.velocity.y*(obj2.mass - obj1.mass) + 2*obj1.mass*obj1.velocity.y) / (obj2.mass + obj1.mass)
                 timeLeft = 1 - BTt
             elif 0 <= TBt <= 1:
-                obj1.position.y += obj1.velocity.x*TBt
+                obj1.position.y += obj1.velocity.x*TBt + 0.5*obj1.accel.y*TBt**2
                 obj2.position.y = obj1.position.y - (obj1.rect.height/2 + obj2.rect.width/2)
                 obj1.velocity.y, obj2.velocity.y = (obj1.velocity.y*(obj1.mass - obj2.mass) + 2*obj2.mass*obj2.velocity.y) / (obj1.mass + obj2.mass), (obj2.velocity.y*(obj2.mass - obj1.mass) + 2*obj1.mass*obj1.velocity.y) / (obj2.mass + obj1.mass)
                 timeLeft = 1 - TBt
             else:
                 this.nbadcol += 1
-                timeLeft = 1 #nononono
+                
+                timeLeft = 1 #not good
 
 
             obj1.position += obj1.velocity.scalarMultiply(timeLeft)
             
             obj1.rect.center = obj1.position.get()
             obj2.rect.center = obj2.position.get()
-        #print RLcol
-        #print BTcol
-                
             
+        for o in range(len(this.aliveObjects)):
+            this.objects[this.aliveObjects[o]].accel = copy.copy(ACCEL)
             
             
     def draw(this):
         objectScreen.fill((255,255,255))
         for o in this.aliveObjects:
             if focus == o:
+                this.objects[o].draw((0,255,0))
+            elif this.objects[o].charge < 0:
+                this.objects[o].draw((0,0,255))
+            elif this.objects[o].charge > 0:
                 this.objects[o].draw((255,0,0))
             else:
                 this.objects[o].draw()
@@ -203,7 +277,7 @@ class ObjectManager:
         if this.aliveObjects:
             this.aliveObjects.append(this.aliveObjects[-1]+1)
         else:
-            this.aliveObjects.append(0)
+            this.aliveObjects.append(len(this.objects)-1)
     def click(this, pos):
         if focus == -1:
             for i in this.aliveObjects:
@@ -215,6 +289,10 @@ class ObjectManager:
             if this.objects[i].rect.colliderect(rect):
                 return False
         return True
+
+    def delete(this):
+        this.objects.pop(focus)
+        this.aliveObjects.pop(this.aliveObjects.index(focus))
 
 class Tab:
     def __init__(this, rect, text):
@@ -306,9 +384,12 @@ class Textbox:
 
 
 class Graph:
-    def __init__(this, rect):
+    def __init__(this, rect, axis):
         this.rect = rect
         this.data = []
+        this.axis = axis
+        if this.axis:
+            this.ap = [(rect.left, rect.centery), (rect.right, rect.centery)]
     def clear(this):
         this.data = []
     def add(this, data):
@@ -318,6 +399,8 @@ class Graph:
         offset = len(this.data)-this.rect.width
         if offset < 0:
             offset = 0
+        if this.axis:
+            pygame.draw.line(screen, (0,0,0), this.ap[0], this.ap[1], 1)
         for x in range(len(this.data)-this.rect.width, len(this.data)-2):
             if x>=0:
                 pygame.draw.line(screen,(0,0,0),(x+this.rect.left - offset,this.rect.bottom - this.data[x]),(x+this.rect.left+1 - offset,this.rect.bottom - this.data[x+1]),1)
@@ -409,10 +492,10 @@ class Properter:
 
         graphRect = pygame.Rect(464, 40, 560, 560)
         this.graph = {}
-        this.graph["position.x"] = Graph(graphRect)
-        this.graph["position.y"] = Graph(graphRect)
-        this.graph["velocity.x"] = Graph(graphRect)
-        this.graph["velocity.y"] = Graph(graphRect)
+        this.graph["position.x"] = Graph(graphRect, False)
+        this.graph["position.y"] = Graph(graphRect, False)
+        this.graph["velocity.x"] = Graph(graphRect, True)
+        this.graph["velocity.y"] = Graph(graphRect, True)
 
         this.tab = {}
         this.tab["position.x"] = Tab(pygame.Rect(464, 9, 125, 30), "x position")
@@ -421,7 +504,9 @@ class Properter:
         this.tab["velocity.y"] = Tab(pygame.Rect(842, 9, 125, 30), "y velocity")
 
         this.graphToggle = checkBoxImg[0].get_rect().move(100,10)
-        this.newBoxButton = newBlockImg[0].get_rect().move(130,10)
+        this.newBoxButton = newBlockImg[0].get_rect().move(130,7)
+        this.deleteButton = deleteButtonImg.get_rect().move(160,7)
+        this.quitButton = xButtonImg.get_rect().move(1008,0)
 
         this.zoomSlider = Slider(1, 4, 0, 0.5, pygame.Rect(10, 10, 80, 20))
         
@@ -460,7 +545,7 @@ class Properter:
         screen.blit(this.boxText, (5,40))
         for t in this.textbox:
             this.textbox[t].draw()
-        if graphing:
+        if graphing and focus != -1:
             if this.graphon:
                 this.graph[this.graphon].draw()
                 pygame.draw.rect(screen, (255,255,255), pygame.Rect(this.graph[this.graphon].rect.x,0,this.graph[this.graphon].rect.width, 40), 0)
@@ -472,6 +557,8 @@ class Properter:
         this.zoomSlider.draw()
         screen.blit(checkBoxImg[graphing], this.graphToggle.topleft)
         screen.blit(newBlockImg[newboxing], this.newBoxButton.topleft)
+        screen.blit(deleteButtonImg, this.deleteButton.topleft)
+        screen.blit(xButtonImg, this.quitButton.topleft)
         if newboxing:
             this.newBoxer.draw()
 
@@ -482,6 +569,9 @@ class Properter:
             this.updateTextBoxes()
     
     def click(this, click):
+        if this.quitButton.collidepoint(click):
+            global running
+            running = False
         if newboxing:
             this.newBoxer.click(click)
             return True
@@ -521,13 +611,16 @@ class Properter:
                 return True
             if this.textboxon:
                 this.closeTextBox()
+            if this.deleteButton.collidepoint(click) and focus != -1:
+                objectmanager.delete()
+            
             return False
     
     def keyit(this, event):
         if newboxing and this.newBoxer.on:
             this.newBoxer.box[this.newBoxer.on].parseInput(event)
             this.newBoxer.erroring = False
-        elif paused:
+        elif paused and this.textboxon:
             this.textbox[this.textboxon].parseInput(event)
             if event.key == 13:
                 this.closeTextBox()
@@ -658,6 +751,7 @@ scrollBarImg = pygame.image.load("res/img/scrollBar.png").convert_alpha()
 scrollBoxImg = pygame.image.load("res/img/scrollBox.png").convert_alpha()
 
 xButtonImg = pygame.image.load("res/img/x.png").convert_alpha()
+deleteButtonImg = pygame.image.load("res/img/deleteButton.png").convert_alpha()
                
 
 
@@ -675,16 +769,6 @@ CK = 8.9875517873681764*10**9
 ACCEL = Vector2(0, 9.8/FPS)
 
 objectmanager = ObjectManager()
-
-
-
-#objectmanager.add(Object(Vector2(300,359), Vector2(0,0), ACCEL, (20,20), 5000.0, 1.0, 1.0, -0.01, False))
-for x in range(16):
-    objectmanager.add(Object(Vector2(32+x*64,25), Vector2(0,0), ACCEL, (64,50), 2000, 1.0, 1.0, 0.01, True))
-    objectmanager.add(Object(Vector2(32+x*64,575), Vector2(0,0), ACCEL, (64,50), 2000, 1.0, 1.0, 0.01, True))
-for x in range(1,11):
-    objectmanager.add(Object(Vector2(32,25+50*x), Vector2(0,0), ACCEL, (64,50), 2000, 1.0, 1.0, 0.01, True))
-    objectmanager.add(Object(Vector2(992,25+50*x), Vector2(0,0), ACCEL, (64,50), 2000, 1.0, 1.0, 0.01, True))
 
 properter = Properter()
 
@@ -802,7 +886,76 @@ while running:
     objectmanager.draw()
     properter.draw()
 
-    
+    keys = pygame.key.get_pressed()
+    if keys[K_F5]:
+        ###########RANDOM SMALLS
+        focus = -1
+        objectmanager = ObjectManager()
+        properter = Properter()
+        for x in range(25):
+            objectmanager.add(Object(Vector2(randint(20,1000),randint(20,580)), Vector2(0,0), ACCEL, (4,4), 100, 1.0, 1.0, 0.0, False))
+    if keys[K_F6]:
+        ###########RANDOM SMALLS
+        focus = -1
+        objectmanager = ObjectManager()
+        properter = Properter()
+        for x in range(25):
+            objectmanager.add(Object(Vector2(randint(20,1000),randint(20,580)), Vector2(randint(-10,10),randint(-10,10)), ACCEL, (4,4), 100, 1.0, 1.0, 0.0, False))
+    elif keys[K_F7]:
+        ###########RANDOM SMALLS
+        focus = -1
+        objectmanager = ObjectManager()
+        properter = Properter()
+        for x in range(25):
+            objectmanager.add(Object(Vector2(randint(20,1000),randint(20,580)), Vector2(0,0), ACCEL, (4,4), 100, 1.0, 1.0, [0.001,-0.001][randint(0,1)], False))
+    elif keys[K_F8]:
+        #########MAGNET CAGE 0
+        focus = -1
+        objectmanager = ObjectManager()
+        properter = Properter()
+        for x in range(16):
+            objectmanager.add(Object(Vector2(32+x*64,25), Vector2(0,0), ACCEL, (64,50), 2000, 1.0, 1.0, 0.01, True))
+            objectmanager.add(Object(Vector2(32+x*64,575), Vector2(0,0), ACCEL, (64,50), 2000, 1.0, 1.0, 0.01, True))
+        for x in range(1,11):
+            objectmanager.add(Object(Vector2(32,25+50*x), Vector2(0,0), ACCEL, (64,50), 2000, 1.0, 1.0, 0.01, True))
+            objectmanager.add(Object(Vector2(992,25+50*x), Vector2(0,0), ACCEL, (64,50), 2000, 1.0, 1.0, 0.01, True))
+        objectmanager.add(Object(Vector2(512,300), Vector2(10,10), ACCEL, (24,24), 10, 1.0, 1.0, 0.01, False))
+    elif keys[K_F9]:
+        #########MAGNET CAGE 1
+        focus = -1
+        objectmanager = ObjectManager()
+        properter = Properter()
+        for x in range(16):
+            objectmanager.add(Object(Vector2(32+x*64,25), Vector2(0,0), ACCEL, (64,50), 2000, 1.0, 1.0, 0.01, True))
+            objectmanager.add(Object(Vector2(32+x*64,575), Vector2(0,0), ACCEL, (64,50), 2000, 1.0, 1.0, 0.01, True))
+        for x in range(1,11):
+            objectmanager.add(Object(Vector2(32,25+50*x), Vector2(0,0), ACCEL, (64,50), 2000, 1.0, 1.0, 0.01, True))
+            objectmanager.add(Object(Vector2(992,25+50*x), Vector2(0,0), ACCEL, (64,50), 2000, 1.0, 1.0, 0.01, True))
+        objectmanager.add(Object(Vector2(512,300), Vector2(10,10), ACCEL, (24,24), 10, 1.0, 1.0, 0.01, False))
+        objectmanager.add(Object(Vector2(412,200), Vector2(10,10), ACCEL, (24,24), 10, 1.0, 1.0, 0.01, False))
+    elif keys[K_F10]:
+        #########MAGNET CAGE 2
+        focus = -1
+        objectmanager = ObjectManager()
+        properter = Properter()
+        for x in range(16):
+            objectmanager.add(Object(Vector2(32+x*64,25), Vector2(0,0), ACCEL, (64,50), 2000, 1.0, 1.0, 0.01, True))
+            objectmanager.add(Object(Vector2(32+x*64,575), Vector2(0,0), ACCEL, (64,50), 2000, 1.0, 1.0, 0.01, True))
+        for x in range(1,11):
+            objectmanager.add(Object(Vector2(32,25+50*x), Vector2(0,0), ACCEL, (64,50), 2000, 1.0, 1.0, 0.01, True))
+            objectmanager.add(Object(Vector2(992,25+50*x), Vector2(0,0), ACCEL, (64,50), 2000, 1.0, 1.0, 0.01, True))
+        objectmanager.add(Object(Vector2(512,300), Vector2(20,20), ACCEL, (24,24), 10, 1.0, 1.0, 0.01, False))
+        objectmanager.add(Object(Vector2(412,200), Vector2(20,20), ACCEL, (24,24), 10, 1.0, 1.0, 0.01, False))
+    elif keys[K_F11]:
+        focus = -1
+        objectmanager = ObjectManager()
+        properter = Properter()
+        objectmanager.add(Object(Vector2(500,300), Vector2(0,0), ACCEL, (160,60), 10, 1.0, 1.0, 0.01, True))
+        objectmanager.add(Object(Vector2(500,500), Vector2(0,0), ACCEL, (24,24), 1, 1.0, 1.0, -0.00014538627399100616, False))
+    elif keys[K_F12]:
+        focus = -1
+        objectmanager = ObjectManager()
+        properter = Properter()
     pygame.display.flip()
     clock.tick(30)
 print "Number of bad collisions:",objectmanager.nbadcol
